@@ -130,6 +130,118 @@ impl CPU {
         }
     }
 
+    fn adc(&mut self, mode: &AddressingMode) {
+        todo!("ADC instruction not yet implemented");
+    }
+
+    fn and(&mut self, mode: &AddressingMode) {
+        todo!("AND instruction not yet implemented");
+    }
+
+    fn asl(&mut self, mode: &AddressingMode) {
+        todo!("ASL instruction not yet implemented");
+    }
+
+    fn bcc(&mut self) {
+        todo!("BCC instruction not yet implemented");
+    }
+
+    fn bcs(&mut self) {
+        todo!("BCS instruction not yet implemented");
+    }
+
+    fn beq(&mut self) {
+        todo!("BEQ instruction not yet implemented");
+    }
+
+    fn bit(&mut self, mode: &AddressingMode) {
+        todo!("BIT instruction not yet implemented");
+    }
+
+    fn bmi(&mut self) {
+        todo!("BMI instruction not yet implemented");
+    }
+
+    fn bne(&mut self) {
+        todo!("BNE instruction not yet implemented");
+    }
+
+    fn bpl(&mut self) {
+        todo!("BPL instruction not yet implemented");
+    }
+
+    fn brk(&mut self) {
+        todo!("BRK instruction not yet implemented");
+    }
+
+    fn bvc(&mut self) {
+        todo!("BVC instruction not yet implemented");
+    }
+
+    fn bvs(&mut self) {
+        todo!("BVS instruction not yet implemented");
+    }
+
+    fn clc(&mut self) {
+        todo!("CLC instruction not yet implemented");
+    }
+
+    fn cld(&mut self) {
+        todo!("CLD instruction not yet implemented");
+    }
+
+    fn cli(&mut self) {
+        todo!("CLI instruction not yet implemented");
+    }
+
+    fn clv(&mut self) {
+        todo!("CLV instruction not yet implemented");
+    }
+
+    fn cmp(&mut self, mode: &AddressingMode) {
+        todo!("CMP instruction not yet implemented");
+    }
+
+    fn cpx(&mut self, mode: &AddressingMode) {
+        todo!("CPX instruction not yet implemented");
+    }
+
+    fn cpy(&mut self, mode: &AddressingMode) {
+        todo!("CPY instruction not yet implemented");
+    }
+
+    fn dec(&mut self, mode: &AddressingMode) {
+        todo!("DEC instruction not yet implemented");
+    }
+
+    fn dex(&mut self) {
+        todo!("DEX instruction not yet implemented");
+    }
+
+    fn dey(&mut self) {
+        todo!("DEY instruction not yet implemented");
+    }
+
+    fn eor(&mut self, mode: &AddressingMode) {
+        todo!("EOR instruction not yet implemented");
+    }
+
+    fn inc(&mut self, mode: &AddressingMode) {
+        todo!("INC instruction not yet implemented");
+    }
+
+    fn iny(&mut self) {
+        todo!("INY instruction not yet implemented");
+    }
+
+    fn jmp(&mut self, mode: &AddressingMode) {
+        todo!("JMP instruction not yet implemented");
+    }
+
+    fn jsr(&mut self, mode: &AddressingMode) {
+        todo!("JSR instruction not yet implemented");
+    }
+
     fn lda(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
@@ -139,10 +251,106 @@ impl CPU {
         self.update_negative_flag(self.register_a);
     }
 
+    fn ldx(&mut self, mode: &AddressingMode) {
+        todo!("LDX instruction not yet implemented");
+    }
+
+    fn ldy(&mut self, mode: &AddressingMode) {
+        todo!("LDY instruction not yet implemented");
+    }
+
+    fn lsr(&mut self, mode: &AddressingMode) {
+        todo!("LSR instruction not yet implemented");
+    }
+
+    fn nop(&mut self) {
+        todo!("NOP instruction not yet implemented");
+    }
+
+    fn ora(&mut self, mode: &AddressingMode) {
+        todo!("ORA instruction not yet implemented");
+    }
+
+    fn pha(&mut self) {
+        todo!("PHA instruction not yet implemented");
+    }
+
+    fn php(&mut self) {
+        todo!("PHP instruction not yet implemented");
+    }
+
+    fn pla(&mut self) {
+        todo!("PLA instruction not yet implemented");
+    }
+
+    fn plp(&mut self) {
+        todo!("PLP instruction not yet implemented");
+    }
+
+    fn rol(&mut self, mode: &AddressingMode) {
+        todo!("ROL instruction not yet implemented");
+    }
+
+    fn ror(&mut self, mode: &AddressingMode) {
+        todo!("ROR instruction not yet implemented");
+    }
+
+    fn rti(&mut self) {
+        todo!("RTI instruction not yet implemented");
+    }
+
+    fn rts(&mut self) {
+        todo!("RTS instruction not yet implemented");
+    }
+
+    fn sbc(&mut self, mode: &AddressingMode) {
+        todo!("SBC instruction not yet implemented");
+    }
+
+    fn sec(&mut self) {
+        todo!("SEC instruction not yet implemented");
+    }
+
+    fn sed(&mut self) {
+        todo!("SED instruction not yet implemented");
+    }
+
+    fn sei(&mut self) {
+        todo!("SEI instruction not yet implemented");
+    }
+
+    fn stx(&mut self, mode: &AddressingMode) {
+        todo!("STX instruction not yet implemented");
+    }
+
+    fn sty(&mut self, mode: &AddressingMode) {
+        todo!("STY instruction not yet implemented");
+    }
+
     fn tax(&mut self) {
         self.register_x = self.register_a;
         self.update_zero_flag(self.register_x);
         self.update_negative_flag(self.register_x);
+    }
+
+    fn tay(&mut self) {
+        todo!("TAY instruction not yet implemented");
+    }
+
+    fn tsx(&mut self) {
+        todo!("TSX instruction not yet implemented");
+    }
+
+    fn txa(&mut self) {
+        todo!("TXA instruction not yet implemented");
+    }
+
+    fn txs(&mut self) {
+        todo!("TXS instruction not yet implemented");
+    }
+
+    fn tya(&mut self) {
+        todo!("TYA instruction not yet implemented");
     }
 
     fn inx(&mut self) {
