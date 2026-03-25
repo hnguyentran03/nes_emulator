@@ -1,11 +1,25 @@
 use std::collections::HashMap;
 use crate::opcodes;
 
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct CPUFlags: u8 {
+        const CARRY     = 0b00000001;
+        const ZERO      = 0b00000010;
+        const INTERRUPT = 0b00000100;
+        const DECIMAL   = 0b00001000;
+        const BREAK     = 0b00010000;
+        const UNUSED    = 0b00100000;
+        const OVERFLOW  = 0b01000000;
+        const NEGATIVE  = 0b10000000;
+    }
+}
+
 pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
     pub register_y: u8,
-    pub status: u8, // Keeps track of the various flags in the CPU: Negative, Overflow, Break, Decimal, Interrupt, Zero, Carry
+    pub flags: CPUFlags,
     pub program_counter: u16,
     memory: [u8; 0xFFFF],
 }
@@ -60,31 +74,10 @@ impl CPU {
             register_a: 0,
             register_x: 0,
             register_y: 0,
-            status: 0,
+            flags: CPUFlags::empty(),
             program_counter: 0,
             memory: [0; 0xFFFF],
         }
-    }
-
-    pub fn reset(&mut self) {
-        self.register_a = 0;
-        self.register_x = 0;
-        self.register_y = 0;
-        self.status = 0;
-
-        self.program_counter = self.mem_read_u16(0xFFFC);
-    }
-
-    pub fn load_and_run(&mut self, program: Vec<u8>) {
-        self.load(program);
-        self.reset();
-        self.run();
-    }
-
-    pub fn load(&mut self, program: Vec<u8>) {
-        // [0x8000 .. 0xFFFF] is reserved for Program ROM
-        self.memory[0x8000 .. (0x8000 + program.len())].copy_from_slice(&program[..]);
-        self.mem_write_u16(0xFFFC, 0x8000);
     }
 
     fn get_operand_address(&self, mode: &AddressingMode) -> u16 {
@@ -166,19 +159,40 @@ impl CPU {
     // The zero flag is at the least significant bit
     fn update_zero_flag(&mut self, result: u8) {
         if result == 0 {
-            self.status = self.status | 0b0000_0010;
+            self.flags.insert(CPUFlags::ZERO);
         } else {
-            self.status = self.status & 0b1111_1101;
+            self.flags.remove(CPUFlags::ZERO);
         }
     }
 
     // The negative flag is at the most significant bit
     fn update_negative_flag(&mut self, result: u8) {
         if result & 0b1000_0000 != 0 {
-            self.status = self.status | 0b1000_0000;
+            self.flags.insert(CPUFlags::NEGATIVE);
         } else {
-            self.status = self.status & 0b0111_1111;
+            self.flags.remove(CPUFlags::NEGATIVE)
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.register_a = 0;
+        self.register_x = 0;
+        self.register_y = 0;
+        self.flags = CPUFlags::empty();
+
+        self.program_counter = self.mem_read_u16(0xFFFC);
+    }
+
+    pub fn load_and_run(&mut self, program: Vec<u8>) {
+        self.load(program);
+        self.reset();
+        self.run();
+    }
+
+    pub fn load(&mut self, program: Vec<u8>) {
+        // [0x8000 .. 0xFFFF] is reserved for Program ROM
+        self.memory[0x8000 .. (0x8000 + program.len())].copy_from_slice(&program[..]);
+        self.mem_write_u16(0xFFFC, 0x8000);
     }
 
     // Fetches the next instruction, decodes it and executies it.
@@ -231,8 +245,8 @@ mod test {
         cpu.load_and_run(program);
 
         assert_eq!(cpu.register_a, 0x05);
-        assert!(cpu.status & 0b0000_0010 == 0b00);
-        assert!(cpu.status & 0b1000_0000 == 0);
+        assert!(!cpu.flags.contains(CPUFlags::ZERO));
+        assert!(!cpu.flags.contains(CPUFlags::NEGATIVE));
     }
 
      #[test]
@@ -243,7 +257,7 @@ mod test {
 
         cpu.load_and_run(program);
 
-        assert!(cpu.status & 0b0000_0010 == 0b10);
+        assert!(cpu.flags.contains(CPUFlags::ZERO));
     }
 
     #[test]
