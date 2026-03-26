@@ -42,54 +42,54 @@ lazy_static! {
         ("AND", 0x31, 2, AddressingMode::Indirect_Y),
 
         // ASL: Arithmetic Shift Left
-        ("ASL", 0x0A, 1, AddressingMode::NoneAddressing),
+        ("ASL", 0x0A, 1, AddressingMode::Accumulator),
         ("ASL", 0x06, 2, AddressingMode::ZeroPage),
         ("ASL", 0x16, 2, AddressingMode::ZeroPage_X),
         ("ASL", 0x0E, 3, AddressingMode::Absolute),
         ("ASL", 0x1E, 3, AddressingMode::Absolute_X),
 
         // BCC: Branch if Carry Clear
-        ("BCC", 0x90, 2, AddressingMode::NoneAddressing),
+        ("BCC", 0x90, 2, AddressingMode::Relative),
 
         // BCS: Branch if Carry Set
-        ("BCS", 0xB0, 2, AddressingMode::NoneAddressing),
+        ("BCS", 0xB0, 2, AddressingMode::Relative),
 
         // BEQ: Branch if Equal
-        ("BEQ", 0xF0, 2, AddressingMode::NoneAddressing),
+        ("BEQ", 0xF0, 2, AddressingMode::Relative),
 
         // BIT: Bit Test
         ("BIT", 0x24, 2, AddressingMode::ZeroPage),
         ("BIT", 0x2C, 3, AddressingMode::Absolute),
 
         // BMI: Branch if Minus
-        ("BMI", 0x30, 2, AddressingMode::NoneAddressing),
+        ("BMI", 0x30, 2, AddressingMode::Relative),
 
         // BNE: Branch if Not Equal
-        ("BNE", 0xD0, 2, AddressingMode::NoneAddressing),
+        ("BNE", 0xD0, 2, AddressingMode::Relative),
 
         // BPL: Branch if Positive
-        ("BPL", 0x10, 2, AddressingMode::NoneAddressing),
+        ("BPL", 0x10, 2, AddressingMode::Relative),
 
         // BRK: Force Interrupt
-        ("BRK", 0x00, 1, AddressingMode::NoneAddressing),
+        ("BRK", 0x00, 1, AddressingMode::Implied),
 
         // BVC: Branch if Overflow Clear
-        ("BVC", 0x50, 2, AddressingMode::NoneAddressing),
+        ("BVC", 0x50, 2, AddressingMode::Relative),
 
         // BVS: Branch if Overflow Set
-        ("BVS", 0x70, 2, AddressingMode::NoneAddressing),
+        ("BVS", 0x70, 2, AddressingMode::Relative),
 
         // CLC: Clear Carry Flag
-        ("CLC", 0x18, 1, AddressingMode::NoneAddressing),
+        ("CLC", 0x18, 1, AddressingMode::Implied),
 
         // CLD: Clear Decimal Mode
-        ("CLD", 0xD8, 1, AddressingMode::NoneAddressing),
+        ("CLD", 0xD8, 1, AddressingMode::Implied),
 
         // CLI: Clear Interrupt Disable
-        ("CLI", 0x58, 1, AddressingMode::NoneAddressing),
+        ("CLI", 0x58, 1, AddressingMode::Implied),
 
         // CLV: Clear Overflow Flag
-        ("CLV", 0xB8, 1, AddressingMode::NoneAddressing),
+        ("CLV", 0xB8, 1, AddressingMode::Implied),
 
         // CMP: Compare
         ("CMP", 0xC9, 2, AddressingMode::Immedtiate),
@@ -118,10 +118,10 @@ lazy_static! {
         ("DEC", 0xDE, 3, AddressingMode::Absolute_X),
 
         // DEX: Decrement X Register
-        ("DEX", 0xCA, 1, AddressingMode::NoneAddressing),
+        ("DEX", 0xCA, 1, AddressingMode::Implied),
 
         // DEY: Decrement Y Register
-        ("DEY", 0x88, 1, AddressingMode::NoneAddressing),
+        ("DEY", 0x88, 1, AddressingMode::Implied),
 
         // EOR: Exclusive OR
         ("EOR", 0x49, 2, AddressingMode::Immedtiate),
@@ -140,14 +140,14 @@ lazy_static! {
         ("INC", 0xFE, 3, AddressingMode::Absolute_X),
 
         // INX: Increment X Register
-        ("INX", 0xE8, 1, AddressingMode::NoneAddressing),
+        ("INX", 0xE8, 1, AddressingMode::Implied),
 
         // INY: Increment Y Register
-        ("INY", 0xC8, 1, AddressingMode::NoneAddressing),
+        ("INY", 0xC8, 1, AddressingMode::Implied),
 
         // JMP: Jump
         ("JMP", 0x4C, 3, AddressingMode::Absolute),
-        ("JMP", 0x6C, 3, AddressingMode::NoneAddressing), // Indirect
+        ("JMP", 0x6C, 3, AddressingMode::Indirect),
 
         // JSR: Jump to Subroutine
         ("JSR", 0x20, 3, AddressingMode::Absolute),
@@ -177,14 +177,14 @@ lazy_static! {
         ("LDY", 0xBC, 3, AddressingMode::Absolute_X),
 
         // LSR: Logical Shift Right
-        ("LSR", 0x4A, 1, AddressingMode::NoneAddressing),
+        ("LSR", 0x4A, 1, AddressingMode::Accumulator),
         ("LSR", 0x46, 2, AddressingMode::ZeroPage),
         ("LSR", 0x56, 2, AddressingMode::ZeroPage_X),
         ("LSR", 0x4E, 3, AddressingMode::Absolute),
         ("LSR", 0x5E, 3, AddressingMode::Absolute_X),
 
         // NOP: No Operation
-        ("NOP", 0xEA, 1, AddressingMode::NoneAddressing),
+        ("NOP", 0xEA, 1, AddressingMode::Implied),
 
         // ORA: Logical Inclusive OR
         ("ORA", 0x09, 2, AddressingMode::Immedtiate),
@@ -197,36 +197,36 @@ lazy_static! {
         ("ORA", 0x11, 2, AddressingMode::Indirect_Y),
 
         // PHA: Push Accumulator
-        ("PHA", 0x48, 1, AddressingMode::NoneAddressing),
+        ("PHA", 0x48, 1, AddressingMode::Implied),
 
         // PHP: Push Processor Status
-        ("PHP", 0x08, 1, AddressingMode::NoneAddressing),
+        ("PHP", 0x08, 1, AddressingMode::Implied),
 
         // PLA: Pull Accumulator
-        ("PLA", 0x68, 1, AddressingMode::NoneAddressing),
+        ("PLA", 0x68, 1, AddressingMode::Implied),
 
         // PLP: Pull Processor Status
-        ("PLP", 0x28, 1, AddressingMode::NoneAddressing),
+        ("PLP", 0x28, 1, AddressingMode::Implied),
 
         // ROL: Rotate Left
-        ("ROL", 0x2A, 1, AddressingMode::NoneAddressing),
+        ("ROL", 0x2A, 1, AddressingMode::Accumulator),
         ("ROL", 0x26, 2, AddressingMode::ZeroPage),
         ("ROL", 0x36, 2, AddressingMode::ZeroPage_X),
         ("ROL", 0x2E, 3, AddressingMode::Absolute),
         ("ROL", 0x3E, 3, AddressingMode::Absolute_X),
 
         // ROR: Rotate Right
-        ("ROR", 0x6A, 1, AddressingMode::NoneAddressing),
+        ("ROR", 0x6A, 1, AddressingMode::Accumulator),
         ("ROR", 0x66, 2, AddressingMode::ZeroPage),
         ("ROR", 0x76, 2, AddressingMode::ZeroPage_X),
         ("ROR", 0x6E, 3, AddressingMode::Absolute),
         ("ROR", 0x7E, 3, AddressingMode::Absolute_X),
 
         // RTI: Return from Interrupt
-        ("RTI", 0x40, 1, AddressingMode::NoneAddressing),
+        ("RTI", 0x40, 1, AddressingMode::Implied),
 
         // RTS: Return from Subroutine
-        ("RTS", 0x60, 1, AddressingMode::NoneAddressing),
+        ("RTS", 0x60, 1, AddressingMode::Implied),
 
         // SBC: Subtract with Carry
         ("SBC", 0xE9, 2, AddressingMode::Immedtiate),
@@ -239,13 +239,13 @@ lazy_static! {
         ("SBC", 0xF1, 2, AddressingMode::Indirect_Y),
 
         // SEC: Set Carry Flag
-        ("SEC", 0x38, 1, AddressingMode::NoneAddressing),
+        ("SEC", 0x38, 1, AddressingMode::Implied),
 
         // SED: Set Decimal Flag
-        ("SED", 0xF8, 1, AddressingMode::NoneAddressing),
+        ("SED", 0xF8, 1, AddressingMode::Implied),
 
         // SEI: Set Interrupt Disable
-        ("SEI", 0x78, 1, AddressingMode::NoneAddressing),
+        ("SEI", 0x78, 1, AddressingMode::Implied),
 
         // STA: Store Accumulator
         ("STA", 0x85, 2, AddressingMode::ZeroPage),
@@ -267,22 +267,22 @@ lazy_static! {
         ("STY", 0x8C, 3, AddressingMode::Absolute),
 
         // TAX: Transfer A to X
-        ("TAX", 0xAA, 1, AddressingMode::NoneAddressing),
+        ("TAX", 0xAA, 1, AddressingMode::Implied),
 
         // TAY: Transfer A to Y
-        ("TAY", 0xA8, 1, AddressingMode::NoneAddressing),
+        ("TAY", 0xA8, 1, AddressingMode::Implied),
 
         // TSX: Transfer Stack Pointer to X
-        ("TSX", 0xBA, 1, AddressingMode::NoneAddressing),
+        ("TSX", 0xBA, 1, AddressingMode::Implied),
 
         // TXA: Transfer X to A
-        ("TXA", 0x8A, 1, AddressingMode::NoneAddressing),
+        ("TXA", 0x8A, 1, AddressingMode::Implied),
 
         // TXS: Transfer X to Stack Pointer
-        ("TXS", 0x9A, 1, AddressingMode::NoneAddressing),
+        ("TXS", 0x9A, 1, AddressingMode::Implied),
 
         // TYA: Transfer Y to A
-        ("TYA", 0x98, 1, AddressingMode::NoneAddressing),
+        ("TYA", 0x98, 1, AddressingMode::Implied),
         ];
     
         pub static ref OP_CODES: HashMap<u8, OpCode> = {
