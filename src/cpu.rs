@@ -17,6 +17,10 @@ bitflags! {
 
 const STACK: u16 = 0x0100;
 const STACK_RESET: u8 = 0xFD;
+const RESET_VECTOR: u16 = 0xFFFC;
+// const INTERRUPT_VECTOR: u16 = 0xFFFE;
+pub const PROGRAM_START: u16 = 0x0600;
+
 
 pub struct CPU {
     pub register_a: u8,
@@ -46,7 +50,7 @@ pub enum AddressingMode {
     Indirect_Y,
 }
 
-trait Mem {
+pub trait Mem {
     fn mem_read(&self, addr: u16) -> u8;
 
     fn mem_write(&mut self, addr: u16, data: u8);
@@ -75,7 +79,7 @@ impl Mem for CPU {
     }
 }
 
-trait Stack {
+pub trait Stack {
     fn stack_push(&mut self, data: u8);
     fn stack_pop(&mut self) -> u8;
 
@@ -172,7 +176,7 @@ impl CPU {
             AddressingMode::Indirect => {
                 let ptr = self.mem_read_u16(self.program_counter);
                 let lo = self.mem_read(ptr);
-                let hi = self.mem_read(if ptr & 0x00FF == 0x00FF {
+                let hi = self.mem_read(if ptr & 0xFF == 0xFF {
                     ptr & 0xFF00
                 } else {
                     ptr.wrapping_add(1)
@@ -295,7 +299,7 @@ impl CPU {
     fn brk(&mut self) {
         self.stack_push_u16(self.program_counter);
         self.stack_push(self.flags.bits());
-        // self.program_counter = self.mem_read_u16(0xFFFE);
+        // self.program_counter = self.mem_read_u16(INTERRUPT_VECTOR);
         self.flags.insert(CPUFlags::BREAK);
     }
 
@@ -614,9 +618,9 @@ impl CPU {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
         let carry = if self.flags.contains(CPUFlags::CARRY) { 1 } else { 0 };
-        let difference = self.register_a as u16 - value as u16 - (1 - carry) as u16;
+        let difference = self.register_a.wrapping_sub(value).wrapping_sub(1 - carry);
 
-        if difference > 0 {
+        if (self.register_a as u16) >= (value as u16).wrapping_add((1 - carry) as u16) {
             self.flags.insert(CPUFlags::CARRY);
         } else {
             self.flags.remove(CPUFlags::CARRY);
@@ -748,7 +752,7 @@ impl CPU {
         self.register_y = 0;
         self.flags = CPUFlags::empty();
         self.stack_ptr = STACK_RESET;
-        self.program_counter = self.mem_read_u16(0xFFFC);
+        self.program_counter = self.mem_read_u16(RESET_VECTOR);
     }
 
     pub fn load_and_run(&mut self, program: Vec<u8>) {
@@ -758,16 +762,23 @@ impl CPU {
     }
 
     pub fn load(&mut self, program: Vec<u8>) {
-        // [0x8000 .. 0xFFFF] is reserved for Program ROM
-        self.memory[0x8000 .. (0x8000 + program.len())].copy_from_slice(&program[..]);
-        self.mem_write_u16(0xFFFC, 0x8000);
+        // [PROGRAM_START .. 0xFFFF] is reserved for Program ROM
+        self.memory[PROGRAM_START as usize .. (PROGRAM_START as usize + program.len())].copy_from_slice(&program[..]);
+        self.mem_write_u16(RESET_VECTOR, PROGRAM_START);
     }
 
-    // Fetches the next instruction, decodes it and executies it.
+
     pub fn run(&mut self) {
+        self.run_with_callback(|_| {});
+    }
+        
+    // Fetches the next instruction, decodes it and executies it.
+    pub fn run_with_callback<F: FnMut(&mut CPU)>(&mut self, mut callback: F) {
         let ref opcodes: HashMap<u8, opcodes::OpCode> = *opcodes::OP_CODES;
 
         loop {
+            callback(self);
+
             let code = self.mem_read(self.program_counter);
             self.program_counter += 1;
             let pc = self.program_counter;
@@ -1005,7 +1016,7 @@ mod test {
 
         cpu.load_and_run(program);
 
-        assert_eq!(cpu.program_counter, 0x8007);
+        assert_eq!(cpu.program_counter, PROGRAM_START + 7);
     }
 
     #[test]
@@ -1016,7 +1027,7 @@ mod test {
 
         cpu.load_and_run(program);
 
-        assert_eq!(cpu.program_counter, 0x8007);
+        assert_eq!(cpu.program_counter, PROGRAM_START + 7);
     }
 
     #[test]
@@ -1027,7 +1038,7 @@ mod test {
 
         cpu.load_and_run(program);
 
-        assert_eq!(cpu.program_counter, 0x8008);
+        assert_eq!(cpu.program_counter, PROGRAM_START + 8);
     }
 
     #[test]
@@ -1051,7 +1062,7 @@ mod test {
 
         cpu.load_and_run(program);
 
-        assert_eq!(cpu.program_counter, 0x8008);
+        assert_eq!(cpu.program_counter, PROGRAM_START + 8);
     }
 
     #[test]
@@ -1062,7 +1073,7 @@ mod test {
 
         cpu.load_and_run(program);
 
-        assert_eq!(cpu.program_counter, 0x8008);
+        assert_eq!(cpu.program_counter, PROGRAM_START + 8);
     }
 
     #[test]
@@ -1073,7 +1084,7 @@ mod test {
 
         cpu.load_and_run(program);
 
-        assert_eq!(cpu.program_counter, 0x8008);
+        assert_eq!(cpu.program_counter, PROGRAM_START + 8);
     }
 
     #[test]
@@ -1084,7 +1095,7 @@ mod test {
 
         cpu.load_and_run(program);
 
-        assert_eq!(cpu.program_counter, 0x8002);
+        assert_eq!(cpu.program_counter, PROGRAM_START + 2);
     }
 
     #[test]
@@ -1095,7 +1106,7 @@ mod test {
 
         cpu.load_and_run(program);
 
-        assert_eq!(cpu.program_counter, 0x8006);
+        assert_eq!(cpu.program_counter, PROGRAM_START + 6);
     }
 
     #[test]
@@ -1106,7 +1117,7 @@ mod test {
 
         cpu.load_and_run(program);
 
-        assert_eq!(cpu.program_counter, 0x800a);
+        assert_eq!(cpu.program_counter, PROGRAM_START + 10);
     }
 
     #[test]
@@ -1269,9 +1280,11 @@ mod test {
     #[test]
     fn jmp_absolute() {
         let mut cpu = CPU::new();
-        // JMP $8008, padding, LDA #$42, BRK
+        let target = PROGRAM_START + 8;
+        let (target_lo, target_hi) = (target as u8, (target >> 8) as u8);
+        // JMP target, padding, LDA #$42, BRK
         let program = vec![
-            0x4c, 0x08, 0x80, 0xea, 0xea, 0xea, 0xea, 0xea, 0xa9, 0x42, 0x00,
+            0x4c, target_lo, target_hi, 0xea, 0xea, 0xea, 0xea, 0xea, 0xa9, 0x42, 0x00,
         ];
 
         cpu.load_and_run(program);
@@ -1282,8 +1295,10 @@ mod test {
     #[test]
     fn jmp_indirect() {
         let mut cpu = CPU::new();
-        cpu.mem_write(0x30, 0x08);
-        cpu.mem_write(0x31, 0x80);
+        let target = PROGRAM_START + 8;
+        let (target_lo, target_hi) = (target as u8, (target >> 8) as u8);
+        cpu.mem_write(0x30, target_lo);
+        cpu.mem_write(0x31, target_hi);
         // JMP ($0030), padding, LDA #$42, BRK
         let program = vec![
             0x6c, 0x30, 0x00, 0xea, 0xea, 0xea, 0xea, 0xea, 0xa9, 0x42, 0x00,
@@ -1297,8 +1312,10 @@ mod test {
     #[test]
     fn jsr_rts_returns() {
         let mut cpu = CPU::new();
-        // JSR $8009, LDA #$11, BRK, padding, RTS
-        let program = vec![0x20, 0x09, 0x80, 0xa9, 0x11, 0x00, 0xea, 0xea, 0xea, 0x60];
+        let sub = PROGRAM_START + 9;
+        let (sub_lo, sub_hi) = (sub as u8, (sub >> 8) as u8);
+        // JSR sub, LDA #$11, BRK, padding, RTS
+        let program = vec![0x20, sub_lo, sub_hi, 0xa9, 0x11, 0x00, 0xea, 0xea, 0xea, 0x60];
 
         cpu.load_and_run(program);
 
@@ -1383,7 +1400,7 @@ mod test {
 
         cpu.load_and_run(program);
 
-        assert_eq!(cpu.program_counter, 0x8002);
+        assert_eq!(cpu.program_counter, PROGRAM_START + 2);
     }
 
     #[test]
@@ -1449,20 +1466,24 @@ mod test {
         let mut cpu = CPU::new();
         cpu.load(vec![0x40, 0xea, 0x00]);
         cpu.reset();
+        let resume = PROGRAM_START + 2;
+        let (pc_lo, pc_hi) = (resume as u8, (resume >> 8) as u8);
         cpu.mem_write(0x01fb, 0x34);
-        cpu.mem_write(0x01fc, 0x02);
-        cpu.mem_write(0x01fd, 0x80);
+        cpu.mem_write(0x01fc, pc_lo);
+        cpu.mem_write(0x01fd, pc_hi);
         cpu.stack_ptr = 0xfa;
         cpu.run();
 
-        assert_eq!(cpu.program_counter, 0x8003);
+        assert_eq!(cpu.program_counter, PROGRAM_START + 3);
     }
 
     #[test]
     fn rts_returns_from_subroutine() {
         let mut cpu = CPU::new();
-        // JSR $8006, LDA #$99, BRK, LDA #$55, RTS
-        let program = vec![0x20, 0x06, 0x80, 0xa9, 0x99, 0x00, 0xa9, 0x55, 0x60, 0x00];
+        let sub = PROGRAM_START + 6;
+        let (sub_lo, sub_hi) = (sub as u8, (sub >> 8) as u8);
+        // JSR sub, LDA #$99, BRK, LDA #$55, RTS
+        let program = vec![0x20, sub_lo, sub_hi, 0xa9, 0x99, 0x00, 0xa9, 0x55, 0x60, 0x00];
 
         cpu.load_and_run(program);
 
