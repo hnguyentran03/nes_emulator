@@ -1,10 +1,12 @@
 pub mod cpu;
+pub mod bus;
+pub mod rom;
 pub mod opcodes;
+
 use cpu::CPU;
 use cpu::Mem;
 
 use rand::prelude::*;
-
 use sdl2::event::Event;
 use sdl2::EventPump;
 use sdl2::keyboard::Keycode;
@@ -63,7 +65,7 @@ fn handle_user_input(cpu: &mut CPU, event_pump: &mut EventPump) {
 }
 
 fn main() {
-    // Initialize SDL2
+    // Initialize SDL2 for the graphics
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem.window("NES Emulator", 32 * 10, 32 * 10)
@@ -76,8 +78,6 @@ fn main() {
 
     let creator = canvas.texture_creator();
     let mut texture = creator.create_texture_static(PixelFormatEnum::RGB24, 32, 32).unwrap();
-
-
 
     let game_code = vec![
         0x20, 0x06, 0x06, 0x20, 0x38, 0x06, 0x20, 0x0d, 0x06, 0x20, 0x2a, 0x06, 0x60, 0xa9, 0x02,
@@ -103,6 +103,7 @@ fn main() {
         0x60, 0xa6, 0xff, 0xea, 0xea, 0xca, 0xd0, 0xfb, 0x60,
     ];
 
+    // Initialize the CPU to run the game code
     let mut cpu = cpu::CPU::new();
     cpu.load(game_code);
     cpu.reset();
