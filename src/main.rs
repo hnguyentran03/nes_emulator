@@ -5,6 +5,8 @@ pub mod opcodes;
 
 use cpu::CPU;
 use cpu::Mem;
+use bus::Bus;
+use rom::Rom;
 
 use rand::prelude::*;
 use sdl2::event::Event;
@@ -103,10 +105,29 @@ fn main() {
         0x60, 0xa6, 0xff, 0xea, 0xea, 0xca, 0xd0, 0xfb, 0x60,
     ];
 
-    // Initialize the CPU to run the game code
-    let mut cpu = cpu::CPU::new();
-    cpu.load(game_code);
-    cpu.reset();
+        // Initialize the CPU to run the game code
+        // Create a proper NES ROM with the game code
+        let mut rom_data = vec![
+            // NES header (16 bytes)
+            0x4E, 0x45, 0x53, 0x1A, // "NES" followed by MS-DOS end-of-file
+            0x02,                   // 2 * 16KB PRG ROM
+            0x01,                   // 1 * 8KB CHR ROM  
+            0x00, 0x00,            // Mapper, mirroring, battery, trainer
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Padding
+        ];
+    
+        // Add PRG ROM 
+        let mut prg_rom = game_code.clone();
+        prg_rom.resize(0x8000, 0); // Pad to 32KB
+        rom_data.extend(prg_rom);
+    
+        // Add CHR ROM (8KB)
+        rom_data.extend(vec![0; 0x2000]);
+    
+        let rom = Rom::new(&rom_data).unwrap();
+        let bus = Bus::new(rom);
+        let mut cpu = cpu::CPU::new(bus);
+        cpu.reset();
 
     let mut screen = [0; 32 * 3 * 32];
     let mut rng = rand::rng();

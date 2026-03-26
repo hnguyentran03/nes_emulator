@@ -59,7 +59,7 @@ impl Rom {
 }
 
 #[cfg(test)]
-mod test {
+pub mod test {
     use super::*;
 
     struct ROMFile {
@@ -93,33 +93,48 @@ mod test {
 
         let file = ROMFile {
             header: vec![
-                0x4E, 0x45, 0x53, 0x1A, 0x02, 0x01, 0x31, 00, 00, 00, 00, 00, 00, 00, 00, 00,
+                00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00,
             ],
             trainer: None,
             pgp_rom: pgp_rom_contents,
             chr_rom: vec![2; 1 * CHR_ROM_PAGE_SIZE],
         };
 
-        let rom_data = create_rom(test_file);
+        let rom_data = create_rom(file);
 
         Rom::new(&rom_data).unwrap()
     }
 
     #[test]
     fn rejects_invalid_nes_tag() {
-        let mut data = build_test_rom(1, 1, 0x00, 0x00, false);
-        data[0] = 0x00;
+        let file = ROMFile {
+            header: vec![
+                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x31, 00, 00, 00, 00, 00, 00, 00, 00, 00,
+            ],
+            trainer: None,
+            pgp_rom: vec![1; 2 * PRG_ROM_PAGE_SIZE],
+            chr_rom: vec![2; 1 * CHR_ROM_PAGE_SIZE],
+        };
+        let rom_data = create_rom(file);
 
-        let result = Rom::new(&data);
+        let result = Rom::new(&rom_data);
 
         assert!(matches!(result, Err(msg) if msg == "Invalid NES file"));
     }
 
-    #[test]
+        #[test]
     fn rejects_unsupported_ines_version() {
-        let data = build_test_rom(1, 1, 0x00, 0x04, false);
+        let file = ROMFile {
+            header: vec![
+                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x00, 0x04, 00, 00, 00, 00, 00, 00, 00, 00,
+            ],
+            trainer: None,
+            pgp_rom: vec![1; 1 * PRG_ROM_PAGE_SIZE],
+            chr_rom: vec![2; 1 * CHR_ROM_PAGE_SIZE],
+        };
+        let rom_data = create_rom(file);
 
-        let result = Rom::new(&data);
+        let result = Rom::new(&rom_data);
 
         assert!(matches!(
             result,
@@ -127,43 +142,63 @@ mod test {
         ));
     }
 
-    #[test]
+        #[test]
     fn parses_mapper_and_rom_data_without_trainer() {
         // Sets the mapper to 0x23 and vertical mirroring
-        let control_1 = 0x31; 
-        let control_2 = 0x20; 
-        let data = build_test_rom(1, 1, control_1, control_2, false);
+        let file = ROMFile {
+            header: vec![
+                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x31, 0x20, 00, 00, 00, 00, 00, 00, 00, 00,
+            ],
+            trainer: None,
+            pgp_rom: vec![0x00, 0x01],
+            chr_rom: vec![0x80],
+        };
+        let rom_data = create_rom(file);
 
-        let rom = Rom::new(&data).unwrap();
+        let rom = Rom::new(&rom_data).unwrap();
 
         assert_eq!(rom.mapper, 0x23);
         assert_eq!(rom.screen_mirror, Mirror::Vertical);
-        assert_eq!(rom.prg_rom.len(), PRG_ROM_PAGE_SIZE);
-        assert_eq!(rom.chr_rom.len(), CHR_ROM_PAGE_SIZE);
+        assert_eq!(rom.prg_rom.len(), 2);
+        assert_eq!(rom.chr_rom.len(), 1);
         assert_eq!(rom.prg_rom[0], 0x00);
         assert_eq!(rom.prg_rom[1], 0x01);
         assert_eq!(rom.chr_rom[0], 0x80);
     }
 
-    #[test]
+        #[test]
     fn skips_trainer_when_present() {
         // Sets the mapper to 0x04 and skips the trainer
-        let control_1 = 0x04; 
-        let data = build_test_rom(1, 1, control_1, 0x00, true);
+        let file = ROMFile {
+            header: vec![
+                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x04, 0x00, 00, 00, 00, 00, 00, 00, 00, 00,
+            ],
+            trainer: Some(vec![0xFF; TRAINER_SIZE]),
+            pgp_rom: vec![0x00],
+            chr_rom: vec![0x80],
+        };
+        let rom_data = create_rom(file);
 
-        let rom = Rom::new(&data).unwrap();
+        let rom = Rom::new(&rom_data).unwrap();
 
         assert_eq!(rom.prg_rom[0], 0x00);
         assert_eq!(rom.chr_rom[0], 0x80);
     }
 
-    #[test]
+        #[test]
     fn uses_four_screen_mirroring_when_flag_set() {
         // Sets the mapper to 0x09 and four-screen mirroring
-        let control_1 = 0x09; 
-        let data = build_test_rom(1, 1, control_1, 0x00, false);
+        let file = ROMFile {
+            header: vec![
+                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x09, 0x00, 00, 00, 00, 00, 00, 00, 00, 00,
+            ],
+            trainer: None,
+            pgp_rom: vec![1; 1 * PRG_ROM_PAGE_SIZE],
+            chr_rom: vec![2; 1 * CHR_ROM_PAGE_SIZE],
+        };
+        let rom_data = create_rom(file);
 
-        let rom = Rom::new(&data).unwrap();
+        let rom = Rom::new(&rom_data).unwrap();
 
         assert_eq!(rom.screen_mirror, Mirror::FourScreen);
     }
