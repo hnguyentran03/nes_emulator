@@ -49,8 +49,10 @@ impl Rom {
         
         let prg_rom_size = data[4] as usize * PRG_ROM_PAGE_SIZE;
         let chr_rom_size = data[5] as usize * CHR_ROM_PAGE_SIZE;
+
         let prg_rom_start = HEADER_SIZE + if skip_trainer { TRAINER_SIZE } else { 0 };
         let chr_rom_start = prg_rom_start + prg_rom_size;
+
         let prg_rom = data[prg_rom_start..prg_rom_start + prg_rom_size].to_vec();
         let chr_rom = data[chr_rom_start..chr_rom_start + chr_rom_size].to_vec();
 
@@ -93,7 +95,8 @@ pub mod test {
 
         let file = ROMFile {
             header: vec![
-                00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00,
+                0x4E, 0x45, 0x53, 0x1A, 0x02, 0x01, 0x31, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                
             ],
             trainer: None,
             pgp_rom: pgp_rom_contents,
@@ -107,9 +110,10 @@ pub mod test {
 
     #[test]
     fn rejects_invalid_nes_tag() {
+        // The first 4 bytes are used for the NES tag so if they are not present, the file is invalid
         let file = ROMFile {
             header: vec![
-                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x31, 00, 00, 00, 00, 00, 00, 00, 00, 00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             ],
             trainer: None,
             pgp_rom: vec![1; 2 * PRG_ROM_PAGE_SIZE],
@@ -122,15 +126,16 @@ pub mod test {
         assert!(matches!(result, Err(msg) if msg == "Invalid NES file"));
     }
 
-        #[test]
+    #[test]
     fn rejects_unsupported_ines_version() {
+        // Byte 7 bits 2–3 != 0 marks non–NES 1.0
         let file = ROMFile {
             header: vec![
-                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x00, 0x04, 00, 00, 00, 00, 00, 00, 00, 00,
+                0x4E, 0x45, 0x53, 0x1A, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             ],
             trainer: None,
-            pgp_rom: vec![1; 1 * PRG_ROM_PAGE_SIZE],
-            chr_rom: vec![2; 1 * CHR_ROM_PAGE_SIZE],
+            pgp_rom: vec![],
+            chr_rom: vec![],
         };
         let rom_data = create_rom(file);
 
@@ -142,16 +147,22 @@ pub mod test {
         ));
     }
 
-        #[test]
+    #[test]
     fn parses_mapper_and_rom_data_without_trainer() {
-        // Sets the mapper to 0x23 and vertical mirroring
+        // Set the mapper to 0x23 and set the screen mirror to vertical mirroring
+        let mut pgp_rom = vec![0u8; PRG_ROM_PAGE_SIZE];
+        pgp_rom[0] = 0x00;
+        pgp_rom[1] = 0x01;
+        let mut chr_rom = vec![0u8; CHR_ROM_PAGE_SIZE];
+        chr_rom[0] = 0x80;
+
         let file = ROMFile {
             header: vec![
-                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x31, 0x20, 00, 00, 00, 00, 00, 00, 00, 00,
+                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x31, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             ],
             trainer: None,
-            pgp_rom: vec![0x00, 0x01],
-            chr_rom: vec![0x80],
+            pgp_rom,
+            chr_rom,
         };
         let rom_data = create_rom(file);
 
@@ -159,23 +170,28 @@ pub mod test {
 
         assert_eq!(rom.mapper, 0x23);
         assert_eq!(rom.screen_mirror, Mirror::Vertical);
-        assert_eq!(rom.prg_rom.len(), 2);
-        assert_eq!(rom.chr_rom.len(), 1);
+        assert_eq!(rom.prg_rom.len(), PRG_ROM_PAGE_SIZE);
+        assert_eq!(rom.chr_rom.len(), CHR_ROM_PAGE_SIZE);
         assert_eq!(rom.prg_rom[0], 0x00);
         assert_eq!(rom.prg_rom[1], 0x01);
         assert_eq!(rom.chr_rom[0], 0x80);
     }
 
-        #[test]
+    #[test]
     fn skips_trainer_when_present() {
-        // Sets the mapper to 0x04 and skips the trainer
+        // Set the mapper to 0x04 and skip the trainer
+        let mut pgp_rom = vec![0u8; PRG_ROM_PAGE_SIZE];
+        pgp_rom[0] = 0x00;
+        let mut chr_rom = vec![0u8; CHR_ROM_PAGE_SIZE];
+        chr_rom[0] = 0x80;
+
         let file = ROMFile {
             header: vec![
-                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x04, 0x00, 00, 00, 00, 00, 00, 00, 00, 00,
+                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             ],
             trainer: Some(vec![0xFF; TRAINER_SIZE]),
-            pgp_rom: vec![0x00],
-            chr_rom: vec![0x80],
+            pgp_rom,
+            chr_rom,
         };
         let rom_data = create_rom(file);
 
@@ -185,12 +201,12 @@ pub mod test {
         assert_eq!(rom.chr_rom[0], 0x80);
     }
 
-        #[test]
+    #[test]
     fn uses_four_screen_mirroring_when_flag_set() {
-        // Sets the mapper to 0x09 and four-screen mirroring
+        // Sets the mapper to 0x09 and sets the screen mirror to four-screen mirroring
         let file = ROMFile {
             header: vec![
-                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x09, 0x00, 00, 00, 00, 00, 00, 00, 00, 00,
+                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             ],
             trainer: None,
             pgp_rom: vec![1; 1 * PRG_ROM_PAGE_SIZE],

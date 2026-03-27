@@ -19,7 +19,8 @@ impl Mem for Bus {
             },
             PPU_REGISTERS..=PPU_REGISTERS_END => {
                 let _mirror_addr = addr & 0b0010_0000_0000_0111;
-                todo!("PPU not yet implemented");
+                // todo!("PPU not yet implemented");
+                0
             },
             PRG_ROM..=PRG_ROM_END => self.read_prg_rom(addr),
             _ => 0, // Ignore reads from other memory areas
@@ -35,7 +36,7 @@ impl Mem for Bus {
             },
             PPU_REGISTERS..=PPU_REGISTERS_END => {
                 let _mirror_addr = addr & 0b0010_0000_0000_0111;
-                todo!("PPU not yet implemented");
+                // todo!("PPU not yet implemented");
             },
             PRG_ROM..=PRG_ROM_END => {
                 panic!("Attempting to write to PRG ROM");
@@ -63,9 +64,22 @@ impl Bus {
         
         // Mirrors the PRG ROM if necessary
         if self.rom.prg_rom.len() == PRG_ROM_PAGE_SIZE && addr >= PRG_ROM_PAGE_SIZE as u16 {
-            addr %= PRG_ROM_PAGE_SIZE as u16;
+            addr = addr % PRG_ROM_PAGE_SIZE as u16;
         }
 
         self.rom.prg_rom[addr as usize]
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::rom::test::build_test_rom;
+
+    #[test]
+    fn test_mem_read_write_to_ram() {
+        let mut bus = Bus::new(build_test_rom(vec![]));
+        bus.mem_write(0x01, 0x55);
+        assert_eq!(bus.mem_read(0x01), 0x55);
     }
 }

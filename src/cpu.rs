@@ -21,7 +21,7 @@ const STACK: u16 = 0x0100;
 const STACK_RESET: u8 = 0xFD;
 const RESET_VECTOR: u16 = 0xFFFC;
 // const INTERRUPT_VECTOR: u16 = 0xFFFE;
-pub const PROGRAM_START: u16 = 0x0000;
+pub const PROGRAM_START: u16 = 0x8000;
 
 
 pub struct CPU {
@@ -125,7 +125,7 @@ impl CPU {
             register_x: 0,
             register_y: 0,
             flags: CPUFlags::from_bits_truncate(0b100100),
-            program_counter: 0,
+            program_counter: PROGRAM_START,
             stack_ptr: STACK_RESET,
             bus,
         }
@@ -776,12 +776,11 @@ impl CPU {
     }
 
     pub fn load(&mut self, program: Vec<u8>) {
-        for i in PROGRAM_START..program.len() as u16 {
+        for i in 0..program.len() as u16 {
             self.mem_write(PROGRAM_START + i, program[i as usize]);
         }
-        self.mem_write_u16(RESET_VECTOR, PROGRAM_START);
+        // self.mem_write_u16(RESET_VECTOR, PROGRAM_START);
     }
-
 
     pub fn run(&mut self) {
         self.run_with_callback(|_| {});
@@ -997,7 +996,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_a, 0x30);
@@ -1012,7 +1011,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_a, 0x00);
@@ -1027,7 +1026,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_a, 0x82);
@@ -1042,7 +1041,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.program_counter, PROGRAM_START + 7);
@@ -1056,7 +1055,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.program_counter, PROGRAM_START + 7);
@@ -1070,7 +1069,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.program_counter, PROGRAM_START + 8);
@@ -1086,7 +1085,7 @@ mod test {
 
         cpu.mem_write(0xF0, 0xC0);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert!(cpu.flags.contains(CPUFlags::NEGATIVE));
@@ -1101,7 +1100,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.program_counter, PROGRAM_START + 8);
@@ -1115,7 +1114,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.program_counter, PROGRAM_START + 8);
@@ -1129,7 +1128,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.program_counter, PROGRAM_START + 8);
@@ -1143,7 +1142,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.program_counter, PROGRAM_START + 2);
@@ -1157,7 +1156,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.program_counter, PROGRAM_START + 6);
@@ -1171,7 +1170,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.program_counter, PROGRAM_START + 10);
@@ -1185,7 +1184,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert!(!cpu.flags.contains(CPUFlags::CARRY));
@@ -1199,7 +1198,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert!(!cpu.flags.contains(CPUFlags::DECIMAL));
@@ -1213,7 +1212,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert!(!cpu.flags.contains(CPUFlags::INTERRUPT));
@@ -1227,7 +1226,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert!(!cpu.flags.contains(CPUFlags::OVERFLOW));
@@ -1241,7 +1240,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert!(cpu.flags.contains(CPUFlags::ZERO));
@@ -1256,7 +1255,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert!(cpu.flags.contains(CPUFlags::CARRY));
@@ -1270,7 +1269,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert!(cpu.flags.contains(CPUFlags::CARRY));
@@ -1286,7 +1285,7 @@ mod test {
 
         cpu.mem_write(0xF0, 0x02);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.mem_read(0xF0), 0x01);
@@ -1300,7 +1299,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_x, 0x01);
@@ -1314,7 +1313,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_y, 0x01);
@@ -1328,7 +1327,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_a, 0xFF);
@@ -1344,7 +1343,7 @@ mod test {
 
         cpu.mem_write(0xF0, 0xFE);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.mem_read(0xF0), 0xFF);
@@ -1358,7 +1357,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_x, 0x40);
@@ -1372,7 +1371,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_y, 0x40);
@@ -1390,7 +1389,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_a, 0x42);
@@ -1411,7 +1410,7 @@ mod test {
         cpu.mem_write(0xF2, target_lo);
         cpu.mem_write(0xF3, target_hi);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_a, 0x42);
@@ -1427,7 +1426,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_a, 0x11);
@@ -1441,7 +1440,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_a, 0x05);
@@ -1457,7 +1456,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert!(cpu.flags.contains(CPUFlags::ZERO));
@@ -1473,7 +1472,7 @@ mod test {
 
         cpu.mem_write(0xF0, 0x55);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_a, 0x55);
@@ -1487,7 +1486,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_x, 0x77);
@@ -1501,7 +1500,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_y, 0x88);
@@ -1515,7 +1514,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_a, 0x01);
@@ -1530,7 +1529,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.program_counter, PROGRAM_START + 2);
@@ -1544,7 +1543,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_a, 0xFF);
@@ -1558,7 +1557,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_a, 0x37);
@@ -1572,7 +1571,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert!(cpu.flags.contains(CPUFlags::CARRY));
@@ -1587,7 +1586,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_a, 0x01);
@@ -1602,7 +1601,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_a, 0x80);
@@ -1616,7 +1615,7 @@ mod test {
         let rom = build_test_rom(program);
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
-        cpu.reset();
+        // cpu.reset();
         
         let resume = PROGRAM_START + 2;
         let (pc_lo, pc_hi) = (resume as u8, (resume >> 8) as u8);
@@ -1639,7 +1638,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_a, 0x99);
@@ -1653,7 +1652,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_a, 0x02);
@@ -1668,7 +1667,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert!(cpu.flags.contains(CPUFlags::CARRY));
@@ -1682,7 +1681,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert!(cpu.flags.contains(CPUFlags::DECIMAL));
@@ -1696,7 +1695,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert!(cpu.flags.contains(CPUFlags::INTERRUPT));
@@ -1710,7 +1709,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.mem_read(0xF0), 0x42);
@@ -1724,7 +1723,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.mem_read(0x0200), 0x55);
@@ -1738,7 +1737,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.mem_read(0xF0), 0x33);
@@ -1752,7 +1751,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.mem_read(0xF0), 0x44);
@@ -1766,7 +1765,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_x, 0xAB);
@@ -1780,7 +1779,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_y, 0xBC);
@@ -1794,7 +1793,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_x, STACK_RESET);
@@ -1808,7 +1807,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_a, 0xCD);
@@ -1822,7 +1821,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_x, 0xFA);
@@ -1836,7 +1835,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_a, 0xDE);
@@ -1850,7 +1849,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_x, 1);
@@ -1864,7 +1863,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
 
-        cpu.reset();
+        // cpu.reset();
         cpu.run();
 
         assert_eq!(cpu.register_x, 0xC1);
