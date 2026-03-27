@@ -284,7 +284,7 @@ lazy_static! {
         // TYA: Transfer Y to A
         ("TYA", 0x98, 1, AddressingMode::Implied),
         ];
-    
+
         pub static ref OP_CODES: HashMap<u8, OpCode> = {
             let mut map = HashMap::new();
             for (name, code, len, mode) in &*OP_CODES_DEF {

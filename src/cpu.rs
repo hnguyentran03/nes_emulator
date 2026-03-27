@@ -23,7 +23,6 @@ const RESET_VECTOR: u16 = 0xFFFC;
 // const INTERRUPT_VECTOR: u16 = 0xFFFE;
 pub const PROGRAM_START: u16 = 0x8000;
 
-
 pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
@@ -108,13 +107,13 @@ pub trait Stack {
 
 impl Stack for CPU {
     fn stack_push(&mut self, data: u8) {
-        self.mem_write(STACK as u16 + self.stack_ptr as u16, data);
+        self.mem_write(STACK + self.stack_ptr as u16, data);
         self.stack_ptr = self.stack_ptr.wrapping_sub(1);
     }
 
     fn stack_pop(&mut self) -> u8 {
         self.stack_ptr = self.stack_ptr.wrapping_add(1);
-        self.mem_read(STACK as u16 + self.stack_ptr as u16)
+        self.mem_read(STACK + self.stack_ptr as u16)
     }
 }
 
@@ -132,7 +131,7 @@ impl CPU {
     }
 
     /*
-        Implementation of 6502 Instructions 
+        Implementation of 6502 Instructions
         Reference: https://www.masswerk.at/6502/6502_instruction_set.html
     */
 
@@ -140,31 +139,31 @@ impl CPU {
     fn get_operand_address(&self, mode: &AddressingMode) -> u16 {
         match mode {
             AddressingMode::Immedtiate => self.program_counter,
-            
+
             AddressingMode::ZeroPage => self.mem_read(self.program_counter) as u16,
             AddressingMode::ZeroPage_X => {
                 let pos = self.mem_read(self.program_counter);
-                let addr = pos.wrapping_add(self.register_x) as u16;
-                addr
-            },
+
+                pos.wrapping_add(self.register_x) as u16
+            }
             AddressingMode::ZeroPage_Y => {
-                    let pos = self.mem_read(self.program_counter);
-                let addr = pos.wrapping_add(self.register_y) as u16;
-                addr
-            },
-            
+                let pos = self.mem_read(self.program_counter);
+
+                pos.wrapping_add(self.register_y) as u16
+            }
+
             AddressingMode::Absolute => self.mem_read_u16(self.program_counter),
             AddressingMode::Absolute_X => {
                 let base = self.mem_read_u16(self.program_counter);
-                let addr = base.wrapping_add(self.register_x as u16);
-                addr
-            },
+
+                base.wrapping_add(self.register_x as u16)
+            }
             AddressingMode::Absolute_Y => {
                 let base = self.mem_read_u16(self.program_counter);
-                let addr = base.wrapping_add(self.register_y as u16);
-                addr
-            },
-            
+
+                base.wrapping_add(self.register_y as u16)
+            }
+
             AddressingMode::Indirect_X => {
                 let base = self.mem_read(self.program_counter);
 
@@ -172,22 +171,24 @@ impl CPU {
                 let lo = self.mem_read(ptr as u16);
                 let hi = self.mem_read(ptr.wrapping_add(1) as u16);
                 (hi as u16) << 8 | (lo as u16)
-            },
+            }
             AddressingMode::Indirect_Y => {
                 let base = self.mem_read(self.program_counter);
 
                 let lo = self.mem_read(base as u16);
                 let hi = self.mem_read(base.wrapping_add(1) as u16);
                 let deref_base = (hi as u16) << 8 | (lo as u16);
-                let deref = deref_base.wrapping_add(self.register_y as u16);
-                deref
-            },
+
+                deref_base.wrapping_add(self.register_y as u16)
+            }
 
             AddressingMode::Relative => {
                 let offset = self.mem_read(self.program_counter) as i8;
-                let target = self.program_counter.wrapping_add(offset as u16).wrapping_add(1);
-                target
-            },
+
+                self.program_counter
+                    .wrapping_add(offset as u16)
+                    .wrapping_add(1)
+            }
 
             AddressingMode::Indirect => {
                 let ptr = self.mem_read_u16(self.program_counter);
@@ -198,7 +199,7 @@ impl CPU {
                     ptr.wrapping_add(1)
                 });
                 (hi as u16) << 8 | (lo as u16)
-            },
+            }
 
             AddressingMode::Implied | AddressingMode::Accumulator => {
                 panic!("mode {:?} should not be used as an operand address", mode)
@@ -210,7 +211,11 @@ impl CPU {
     fn adc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
-        let carry = if self.flags.contains(CPUFlags::CARRY) { 1 } else { 0 };
+        let carry = if self.flags.contains(CPUFlags::CARRY) {
+            1
+        } else {
+            0
+        };
         let sum = self.register_a as u16 + value as u16 + carry as u16;
 
         if sum > 0xFF {
@@ -236,7 +241,7 @@ impl CPU {
     fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
-        self.register_a = self.register_a & value;
+        self.register_a &= value;
 
         self.update_zero_flag(self.register_a);
         self.update_negative_flag(self.register_a);
@@ -252,7 +257,7 @@ impl CPU {
                 self.set_carry_from_bit7(value);
                 self.update_zero_flag(result);
                 self.update_negative_flag(result);
-            },
+            }
             _ => {
                 let addr = self.get_operand_address(mode);
                 let value = self.mem_read(addr);
@@ -419,7 +424,7 @@ impl CPU {
     fn eor(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
-        self.register_a = self.register_a ^ value;
+        self.register_a ^= value;
 
         self.update_zero_flag(self.register_a);
         self.update_negative_flag(self.register_a);
@@ -434,7 +439,7 @@ impl CPU {
         self.update_zero_flag(result);
         self.update_negative_flag(result);
     }
-    
+
     fn inx(&mut self) {
         self.register_x = self.register_x.wrapping_add(1);
 
@@ -497,7 +502,7 @@ impl CPU {
                 self.set_carry_from_bit0(value);
                 self.update_zero_flag(result);
                 self.update_negative_flag(result);
-            },
+            }
             _ => {
                 let addr = self.get_operand_address(mode);
                 let value = self.mem_read(addr);
@@ -511,14 +516,12 @@ impl CPU {
         }
     }
 
-    fn nop(&mut self) {
-        return;
-    }
+    fn nop(&mut self) {}
 
     fn ora(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
-        self.register_a = self.register_a | value;
+        self.register_a |= value;
 
         self.update_zero_flag(self.register_a);
         self.update_negative_flag(self.register_a);
@@ -529,7 +532,7 @@ impl CPU {
     }
 
     fn php(&mut self) {
-        let mut flags = self.flags.clone();
+        let mut flags = self.flags;
         flags.insert(CPUFlags::BREAK);
         flags.insert(CPUFlags::BREAK2);
         self.stack_push(flags.bits());
@@ -553,7 +556,7 @@ impl CPU {
                 let value = self.register_a;
                 let carry = self.flags.contains(CPUFlags::CARRY);
                 let mut result = value << 1;
-                
+
                 if carry {
                     result |= 1;
                 }
@@ -563,17 +566,17 @@ impl CPU {
                 self.set_carry_from_bit7(value);
                 self.update_zero_flag(result);
                 self.update_negative_flag(result);
-            },
+            }
             _ => {
                 let addr = self.get_operand_address(mode);
                 let value = self.mem_read(addr);
                 let carry = self.flags.contains(CPUFlags::CARRY);
                 let mut result = value << 1;
-                
+
                 if carry {
                     result |= 1;
                 }
-                
+
                 self.mem_write(addr, result);
 
                 self.set_carry_from_bit7(value);
@@ -589,7 +592,7 @@ impl CPU {
                 let value = self.register_a;
                 let carry = self.flags.contains(CPUFlags::CARRY);
                 let mut result = value >> 1;
-                
+
                 if carry {
                     result |= 0b1000_0000;
                 }
@@ -599,17 +602,17 @@ impl CPU {
                 self.set_carry_from_bit0(value);
                 self.update_zero_flag(result);
                 self.update_negative_flag(result);
-            },
+            }
             _ => {
                 let addr = self.get_operand_address(mode);
                 let value = self.mem_read(addr);
                 let carry = self.flags.contains(CPUFlags::CARRY);
                 let mut result = value >> 1;
-                
+
                 if carry {
                     result |= 0b1000_0000;
                 }
-                
+
                 self.mem_write(addr, result);
 
                 self.set_carry_from_bit0(value);
@@ -633,7 +636,11 @@ impl CPU {
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
-        let carry = if self.flags.contains(CPUFlags::CARRY) { 1 } else { 0 };
+        let carry = if self.flags.contains(CPUFlags::CARRY) {
+            1
+        } else {
+            0
+        };
         let difference = self.register_a.wrapping_sub(value).wrapping_sub(1 - carry);
 
         if (self.register_a as u16) >= (value as u16).wrapping_add((1 - carry) as u16) {
@@ -642,7 +649,7 @@ impl CPU {
             self.flags.remove(CPUFlags::CARRY);
         }
 
-        let result = difference as u8;
+        let result = difference;
 
         if (value ^ result) & (self.register_a ^ result) & 0x80 != 0 {
             self.flags.insert(CPUFlags::OVERFLOW);
@@ -706,7 +713,7 @@ impl CPU {
 
     fn txa(&mut self) {
         self.register_a = self.register_x;
-        
+
         self.update_zero_flag(self.register_a);
         self.update_negative_flag(self.register_a);
     }
@@ -785,10 +792,10 @@ impl CPU {
     pub fn run(&mut self) {
         self.run_with_callback(|_| {});
     }
-        
+
     // Fetches the next instruction, decodes it and executies it.
     pub fn run_with_callback<F: FnMut(&mut CPU)>(&mut self, mut callback: F) {
-        let ref opcodes: HashMap<u8, opcodes::OpCode> = *opcodes::OP_CODES;
+        let opcodes: &HashMap<u8, opcodes::OpCode> = &opcodes::OP_CODES;
 
         loop {
             callback(self);
@@ -797,7 +804,9 @@ impl CPU {
             self.program_counter += 1;
             let pc = self.program_counter;
 
-            let opcode = opcodes.get(&code).expect(&format!("Invalid OpCode {:x}", code));
+            let opcode = opcodes
+                .get(&code)
+                .unwrap_or_else(|| panic!("Invalid OpCode {:x}", code));
 
             match code {
                 // ADC
@@ -1421,7 +1430,9 @@ mod test {
         let sub = PROGRAM_START + 9;
         let (sub_lo, sub_hi) = (sub as u8, (sub >> 8) as u8);
         // JSR sub, LDA #$11, BRK, padding, RTS
-        let program = vec![0x20, sub_lo, sub_hi, 0xA9, 0x11, 0x00, 0xEA, 0xEA, 0xEA, 0x60];
+        let program = vec![
+            0x20, sub_lo, sub_hi, 0xA9, 0x11, 0x00, 0xEA, 0xEA, 0xEA, 0x60,
+        ];
         let rom = build_test_rom(program);
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
@@ -1608,7 +1619,7 @@ mod test {
         assert!(cpu.flags.contains(CPUFlags::CARRY));
     }
 
-        #[test]
+    #[test]
     fn rti_restores_pc_and_flags() {
         // RTI, NOP, BRK
         let program = vec![0x40, 0xEA, 0x00];
@@ -1616,7 +1627,7 @@ mod test {
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);
         // cpu.reset();
-        
+
         let resume = PROGRAM_START + 2;
         let (pc_lo, pc_hi) = (resume as u8, (resume >> 8) as u8);
         cpu.mem_write(0x01FB, 0x34);
@@ -1633,7 +1644,9 @@ mod test {
         let sub = PROGRAM_START + 6;
         let (sub_lo, sub_hi) = (sub as u8, (sub >> 8) as u8);
         // JSR sub, LDA #$99, BRK, LDA #$55, RTS
-        let program = vec![0x20, sub_lo, sub_hi, 0xA9, 0x99, 0x00, 0xA9, 0x55, 0x60, 0x00];
+        let program = vec![
+            0x20, sub_lo, sub_hi, 0xA9, 0x99, 0x00, 0xA9, 0x55, 0x60, 0x00,
+        ];
         let rom = build_test_rom(program);
         let bus = Bus::new(rom);
         let mut cpu = CPU::new(bus);

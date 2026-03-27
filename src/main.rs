@@ -1,20 +1,19 @@
-pub mod cpu;
 pub mod bus;
-pub mod rom;
+pub mod cpu;
 pub mod opcodes;
+pub mod rom;
 
+use bus::Bus;
 use cpu::CPU;
 use cpu::Mem;
-use bus::Bus;
 use rom::Rom;
 
 use rand::prelude::*;
-use sdl2::event::Event;
 use sdl2::EventPump;
+use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::pixels::PixelFormatEnum;
-
 
 #[macro_use]
 extern crate lazy_static;
@@ -56,12 +55,28 @@ fn read_screen(cpu: &mut CPU, frame: &mut [u8; 32 * 3 * 32]) -> bool {
 fn handle_user_input(cpu: &mut CPU, event_pump: &mut EventPump) {
     for event in event_pump.poll_iter() {
         match event {
-            Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => std::process::exit(1),
-            Event::KeyDown { keycode: Some(Keycode::W), .. } => cpu.mem_write(0xff, 0x77),
-            Event::KeyDown { keycode: Some(Keycode::S), .. } => cpu.mem_write(0xff, 0x73),
-            Event::KeyDown { keycode: Some(Keycode::A), .. } => cpu.mem_write(0xff, 0x61),
-            Event::KeyDown { keycode: Some(Keycode::D), .. } => cpu.mem_write(0xff, 0x64),
-            _ => {},
+            Event::Quit { .. }
+            | Event::KeyDown {
+                keycode: Some(Keycode::Escape),
+                ..
+            } => std::process::exit(1),
+            Event::KeyDown {
+                keycode: Some(Keycode::W),
+                ..
+            } => cpu.mem_write(0xff, 0x77),
+            Event::KeyDown {
+                keycode: Some(Keycode::S),
+                ..
+            } => cpu.mem_write(0xff, 0x73),
+            Event::KeyDown {
+                keycode: Some(Keycode::A),
+                ..
+            } => cpu.mem_write(0xff, 0x61),
+            Event::KeyDown {
+                keycode: Some(Keycode::D),
+                ..
+            } => cpu.mem_write(0xff, 0x64),
+            _ => {}
         }
     }
 }
@@ -70,7 +85,8 @@ fn main() {
     // Initialize SDL2 for the graphics
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
-    let window = video_subsystem.window("NES Emulator", 32 * 10, 32 * 10)
+    let window = video_subsystem
+        .window("NES Emulator", 32 * 10, 32 * 10)
         .position_centered()
         .build()
         .unwrap();
@@ -79,7 +95,9 @@ fn main() {
     canvas.set_scale(10.0, 10.0).unwrap();
 
     let creator = canvas.texture_creator();
-    let mut texture = creator.create_texture_static(PixelFormatEnum::RGB24, 32, 32).unwrap();
+    let mut texture = creator
+        .create_texture_static(PixelFormatEnum::RGB24, 32, 32)
+        .unwrap();
 
     let game_code = vec![
         0x20, 0x06, 0x06, 0x20, 0x38, 0x06, 0x20, 0x0d, 0x06, 0x20, 0x2a, 0x06, 0x60, 0xa9, 0x02,
@@ -105,29 +123,29 @@ fn main() {
         0x60, 0xa6, 0xff, 0xea, 0xea, 0xca, 0xd0, 0xfb, 0x60,
     ];
 
-        // Initialize the CPU to run the game code
-        // Create a proper NES ROM with the game code
-        let mut rom_data = vec![
-            // NES header (16 bytes)
-            0x4E, 0x45, 0x53, 0x1A, // "NES" followed by MS-DOS end-of-file
-            0x02,                   // 2 * 16KB PRG ROM
-            0x01,                   // 1 * 8KB CHR ROM  
-            0x00, 0x00,            // Mapper, mirroring, battery, trainer
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Padding
-        ];
-    
-        // Add PRG ROM 
-        let mut prg_rom = game_code.clone();
-        prg_rom.resize(0x8000, 0); // Pad to 32KB
-        rom_data.extend(prg_rom);
-    
-        // Add CHR ROM (8KB)
-        rom_data.extend(vec![0; 0x2000]);
-    
-        let rom = Rom::new(&rom_data).unwrap();
-        let bus = Bus::new(rom);
-        let mut cpu = cpu::CPU::new(bus);
-        cpu.reset();
+    // Initialize the CPU to run the game code
+    // Create a proper NES ROM with the game code
+    let mut rom_data = vec![
+        // NES header (16 bytes)
+        0x4E, 0x45, 0x53, 0x1A, // "NES" followed by MS-DOS end-of-file
+        0x02, // 2 * 16KB PRG ROM
+        0x01, // 1 * 8KB CHR ROM
+        0x00, 0x00, // Mapper, mirroring, battery, trainer
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Padding
+    ];
+
+    // Add PRG ROM
+    let mut prg_rom = game_code.clone();
+    prg_rom.resize(0x8000, 0); // Pad to 32KB
+    rom_data.extend(prg_rom);
+
+    // Add CHR ROM (8KB)
+    rom_data.extend(vec![0; 0x2000]);
+
+    let rom = Rom::new(&rom_data).unwrap();
+    let bus = Bus::new(rom);
+    let mut cpu = cpu::CPU::new(bus);
+    cpu.reset();
 
     let mut screen = [0; 32 * 3 * 32];
     let mut rng = rand::rng();

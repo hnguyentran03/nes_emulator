@@ -19,8 +19,9 @@ pub struct Rom {
 }
 
 impl Rom {
-    pub fn new(data: &Vec<u8>) -> Result<Self, String> {
-        if data[0..4] != NES_TAG { // First 4 bytes are used for the NES tag
+    pub fn new(data: &[u8]) -> Result<Self, String> {
+        if data[0..4] != NES_TAG {
+            // First 4 bytes are used for the NES tag
             return Err("Invalid NES file".to_string());
         }
 
@@ -33,7 +34,8 @@ impl Rom {
 
         // Least 2 significant bits of the 2nd control byte determines the ines version
         let ines_version = control_byte_2 >> 2 & 0b11;
-        if ines_version != 0 { // Both bits must be 0 for NES 1.0
+        if ines_version != 0 {
+            // Both bits must be 0 for NES 1.0
             return Err("Unsupported NES file version".to_string());
         }
 
@@ -46,7 +48,7 @@ impl Rom {
         };
 
         let skip_trainer = control_byte_1 & 0b100 != 0;
-        
+
         let prg_rom_size = data[4] as usize * PRG_ROM_PAGE_SIZE;
         let chr_rom_size = data[5] as usize * CHR_ROM_PAGE_SIZE;
 
@@ -56,7 +58,12 @@ impl Rom {
         let prg_rom = data[prg_rom_start..prg_rom_start + prg_rom_size].to_vec();
         let chr_rom = data[chr_rom_start..chr_rom_start + chr_rom_size].to_vec();
 
-        Ok(Rom { prg_rom, chr_rom, mapper, screen_mirror })
+        Ok(Rom {
+            prg_rom,
+            chr_rom,
+            mapper,
+            screen_mirror,
+        })
     }
 }
 
@@ -95,8 +102,8 @@ pub mod test {
 
         let file = ROMFile {
             header: vec![
-                0x4E, 0x45, 0x53, 0x1A, 0x02, 0x01, 0x31, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                
+                0x4E, 0x45, 0x53, 0x1A, 0x02, 0x01, 0x31, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00,
             ],
             trainer: None,
             pgp_rom: pgp_rom_contents,
@@ -113,7 +120,8 @@ pub mod test {
         // The first 4 bytes are used for the NES tag so if they are not present, the file is invalid
         let file = ROMFile {
             header: vec![
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00,
             ],
             trainer: None,
             pgp_rom: vec![1; 2 * PRG_ROM_PAGE_SIZE],
@@ -131,7 +139,8 @@ pub mod test {
         // Byte 7 bits 2–3 != 0 marks non–NES 1.0
         let file = ROMFile {
             header: vec![
-                0x4E, 0x45, 0x53, 0x1A, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x4E, 0x45, 0x53, 0x1A, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00,
             ],
             trainer: None,
             pgp_rom: vec![],
@@ -158,7 +167,8 @@ pub mod test {
 
         let file = ROMFile {
             header: vec![
-                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x31, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x31, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00,
             ],
             trainer: None,
             pgp_rom,
@@ -187,7 +197,8 @@ pub mod test {
 
         let file = ROMFile {
             header: vec![
-                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00,
             ],
             trainer: Some(vec![0xFF; TRAINER_SIZE]),
             pgp_rom,
@@ -206,7 +217,8 @@ pub mod test {
         // Sets the mapper to 0x09 and sets the screen mirror to four-screen mirroring
         let file = ROMFile {
             header: vec![
-                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00,
             ],
             trainer: None,
             pgp_rom: vec![1; 1 * PRG_ROM_PAGE_SIZE],

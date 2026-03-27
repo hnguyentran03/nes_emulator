@@ -1,6 +1,6 @@
 use crate::cpu::Mem;
-use crate::rom::Rom;
 use crate::rom::PRG_ROM_PAGE_SIZE;
+use crate::rom::Rom;
 
 const RAM: u16 = 0x0000;
 const RAM_END: u16 = 0x1FFF;
@@ -16,12 +16,12 @@ impl Mem for Bus {
                 // CPU RAM only has 11 bits of space
                 let mirror_addr = addr & 0b0000_0111_1111_1111;
                 self.cpu_vram[mirror_addr as usize]
-            },
+            }
             PPU_REGISTERS..=PPU_REGISTERS_END => {
                 let _mirror_addr = addr & 0b0010_0000_0000_0111;
                 // todo!("PPU not yet implemented");
                 0
-            },
+            }
             PRG_ROM..=PRG_ROM_END => self.read_prg_rom(addr),
             _ => 0, // Ignore reads from other memory areas
         }
@@ -33,15 +33,15 @@ impl Mem for Bus {
                 // CPU RAM only has 11 bits of space
                 let mirror_addr = addr & 0b0000_0111_1111_1111;
                 self.cpu_vram[mirror_addr as usize] = data;
-            },
+            }
             PPU_REGISTERS..=PPU_REGISTERS_END => {
                 let _mirror_addr = addr & 0b0010_0000_0000_0111;
                 // todo!("PPU not yet implemented");
-            },
+            }
             PRG_ROM..=PRG_ROM_END => {
                 panic!("Attempting to write to PRG ROM");
-            },
-            _ => { /* Ignore writes to other memory areas */ },
+            }
+            _ => { /* Ignore writes to other memory areas */ }
         }
     }
 }
@@ -61,10 +61,10 @@ impl Bus {
 
     fn read_prg_rom(&self, mut addr: u16) -> u8 {
         addr -= PRG_ROM;
-        
+
         // Mirrors the PRG ROM if necessary
         if self.rom.prg_rom.len() == PRG_ROM_PAGE_SIZE && addr >= PRG_ROM_PAGE_SIZE as u16 {
-            addr = addr % PRG_ROM_PAGE_SIZE as u16;
+            addr %= PRG_ROM_PAGE_SIZE as u16;
         }
 
         self.rom.prg_rom[addr as usize]
