@@ -2,6 +2,7 @@ pub mod bus;
 pub mod cpu;
 pub mod opcodes;
 pub mod rom;
+pub mod trace;
 
 use bus::Bus;
 use cpu::CPU;
@@ -115,6 +116,8 @@ fn main() {
     let mut rng = rand::rng();
 
     cpu.run_with_callback(move |cpu| {
+        // println!("{}", trace::trace(cpu));
+
         handle_user_input(cpu, &mut event_pump);
         cpu.mem_write(0xFE, rng.random_range(1..=16));
 
