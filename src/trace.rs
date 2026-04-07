@@ -6,7 +6,7 @@ use crate::opcodes;
 use std::collections::HashMap;
 
 fn get_mem_str(
-    cpu: &CPU,
+    cpu: &mut CPU,
     opcode: &opcodes::OpCode,
     pc: u16,
     mem_addr: u16,

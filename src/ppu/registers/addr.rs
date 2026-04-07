@@ -1,3 +1,5 @@
+// https://www.nesdev.org/wiki/PPU_registers#PPUADDR_-_VRAM_address_($2006_write)
+
 use crate::ppu::PPU_REGISTERS_END;
 
 pub struct AddrRegister {
@@ -15,9 +17,9 @@ impl AddrRegister {
         }
     }
 
-    fn set(&mut self, value: u16) {
-        self.lo_byte = value as u8;
-        self.hi_byte = (value >> 8) as u8;
+    fn set(&mut self, data: u16) {
+        self.lo_byte = data as u8;
+        self.hi_byte = (data >> 8) as u8;
     }
 
     // Mirror the address if it exceeds the PPU registers end
@@ -31,11 +33,11 @@ impl AddrRegister {
         (self.hi_byte as u16) << 8 | (self.lo_byte as u16)
     }
 
-    pub fn update(&mut self, value: u8) {
+    pub fn update(&mut self, data: u8) {
         if self.hi_ptr {
-            self.hi_byte = value;
+            self.hi_byte = data;
         } else {
-            self.lo_byte = value;
+            self.lo_byte = data;
         }
 
         self.mirror_address();
