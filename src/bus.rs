@@ -2,7 +2,7 @@ use crate::cpu::Mem;
 use crate::rom::Rom;
 use crate::rom::{PRG_ROM_PAGE_SIZE, PRG_ROM, PRG_ROM_END};
 use crate::ppu::PPU;
-use crate::ppu::{PPU_REGISTERS, PPU_REGISTERS_END};
+use crate::ppu::PPU_REGISTERS_END;
 
 const RAM: u16 = 0x0000;
 const RAM_END: u16 = 0x1FFF;
@@ -19,6 +19,7 @@ const PPU_ADDR: u16 = 0x2006;
 const PPU_DATA: u16 = 0x2007;
 const OAM_DMA: u16 = 0x4014;
 const PPU_MEM: u16 = 0x2008;
+const PPU_MEM_END: u16 = PPU_REGISTERS_END;
 
 const PPU_MIRROR_MASK: u16 = 0b0010_0000_0000_0111;
 
@@ -74,7 +75,7 @@ impl Mem for Bus {
 
             PPU_DATA => self.ppu.write_to_data(data),
 
-            PPU_MEM..=PPU_REGISTERS_END => {
+            PPU_MEM..=PPU_MEM_END => {
                 let mirror_addr = addr & PPU_MIRROR_MASK;
                 self.mem_write(mirror_addr, data);
             }
