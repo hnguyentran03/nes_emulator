@@ -1,13 +1,11 @@
 use crate::cpu::Mem;
-use crate::rom::PRG_ROM_PAGE_SIZE;
 use crate::rom::Rom;
+use crate::rom::{PRG_ROM_PAGE_SIZE, PRG_ROM, PRG_ROM_END};
+use crate::ppu::PPU;
+use crate::ppu::{PPU_REGISTERS, PPU_REGISTERS_END};
 
 const RAM: u16 = 0x0000;
 const RAM_END: u16 = 0x1FFF;
-const PPU_REGISTERS: u16 = 0x2000;
-const PPU_REGISTERS_END: u16 = 0x3FFF;
-const PRG_ROM: u16 = 0x8000;
-const PRG_ROM_END: u16 = 0xFFFF;
 
 impl Mem for Bus {
     fn mem_read(&self, addr: u16) -> u8 {

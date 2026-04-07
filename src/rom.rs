@@ -4,6 +4,9 @@ pub const CHR_ROM_PAGE_SIZE: usize = 0x2000;
 pub const HEADER_SIZE: usize = 0x10;
 pub const TRAINER_SIZE: usize = 0x200;
 
+pub const PRG_ROM: u16 = 0x8000;
+pub const PRG_ROM_END: u16 = 0xFFFF;
+
 #[derive(Debug, PartialEq)]
 pub enum Mirror {
     Horizontal,
