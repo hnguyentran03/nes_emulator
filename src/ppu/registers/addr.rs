@@ -5,12 +5,12 @@ use crate::ppu::PPU_REGISTERS_END;
 pub struct AddrRegister {
     pub lo_byte: u8,
     pub hi_byte: u8,
-    pub hi_ptr: bool
+    pub hi_ptr: bool,
 }
 
 impl AddrRegister {
     pub fn new() -> Self {
-        AddrRegister { 
+        AddrRegister {
             lo_byte: 0,
             hi_byte: 0,
             hi_ptr: true,

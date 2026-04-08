@@ -8,9 +8,9 @@ pub struct ScrollRegister {
 
 impl ScrollRegister {
     pub fn new() -> Self {
-        ScrollRegister { 
-            scroll_x: 0, 
-            scroll_y: 0, 
+        ScrollRegister {
+            scroll_x: 0,
+            scroll_y: 0,
             latch: false,
         }
     }

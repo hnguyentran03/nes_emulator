@@ -1,9 +1,9 @@
 pub mod bus;
 pub mod cpu;
 pub mod opcodes;
+pub mod ppu;
 pub mod rom;
 pub mod trace;
-pub mod ppu;
 
 use bus::Bus;
 use cpu::CPU;
