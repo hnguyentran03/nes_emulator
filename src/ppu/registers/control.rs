@@ -70,6 +70,10 @@ impl ControlRegister {
         }
     }
 
+    pub fn generate_vblank_nmi(&self) -> bool {
+        self.contains(ControlRegister::GENERATE_NMI)
+    }
+
     pub fn update(&mut self, data: u8) {
         *self = ControlRegister::from_bits_truncate(data);
     }

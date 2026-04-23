@@ -23,6 +23,10 @@ const PALETTE_TABLE_END: u16 = 0x3FFF;
 const MIRROR_MASK: u16 = 0b1011_1111_1111_1111; // Mirrors from 0x3000-0x3EFF to 0x2000-0x2EFF
 const SCREEN_STATE_SIZE: u16 = 0x400; // 1 KiB
 
+const SCANLINES_PER_FRAME: u16 = 262;
+const CYCLES_PER_SCANLINE: usize = 341;
+const CYCLE_AT_NMI_INTERUPT: usize = 241;
+
 pub struct PPU {
     pub chr_rom: Vec<u8>,
     pub palette_table: [u8; 0x20],
@@ -37,6 +41,10 @@ pub struct PPU {
     pub mask: MaskRegister,
     pub scroll: ScrollRegister,
     pub status: StatusRegister,
+
+    cycles: usize,
+    scanlines: u16,
+    nmi_interupted: Option<u8>,
 }
 
 impl PPU {
@@ -55,7 +63,43 @@ impl PPU {
             mask: MaskRegister::new(),
             scroll: ScrollRegister::new(),
             status: StatusRegister::new(),
+
+            cycles: 0,
+            scanlines: 0,
+            nmi_interupted: None,
         }
+    }
+
+    pub fn tick(&mut self, cycles: usize) -> bool {
+        self.cycles += cycles;
+        if self.cycles >= CYCLES_PER_SCANLINE {
+            self.cycles -= CYCLES_PER_SCANLINE;
+            self.scanlines += 1;
+
+            if self.scanlines == CYCLE_AT_NMI_INTERUPT {
+                self.status.set_vblank_status(true);
+                self.status.set_sprite_zero_hit(false);
+                if self.control.generate_vblank_nmi() {
+                    self.status.set_vblank_status(true);
+                    self.nmi_interupted = Some(1);
+                }
+            }
+    
+            if self.scanlines >= SCANLINES_PER_FRAME {
+                self.scanlines = 0;
+                self.nmi_interupted = None;
+                self.status.set_sprite_zero_hit(false);
+                self.status.reset_vblank_status();
+                return true;
+            }
+        }
+
+
+        false
+    }
+
+    pub fn poll_nmi_interupted(&mut self) -> Option<u8> {
+        self.nmi_interupted.take()
     }
 
     pub fn read_status(&mut self) -> u8 {

@@ -22,6 +22,7 @@ const PPU_MEM: u16 = 0x2008;
 const PPU_MEM_END: u16 = PPU_REGISTERS_END;
 
 const PPU_MIRROR_MASK: u16 = 0b0010_0000_0000_0111;
+const PPU_CYCLE_PER_CPU_CYCLE: usize = 3;
 
 impl Mem for Bus {
     fn mem_read(&mut self, addr: u16) -> u8 {
@@ -91,6 +92,7 @@ pub struct Bus {
     cpu_vram: [u8; 0x800],
     prg_rom: Vec<u8>,
     ppu: PPU,
+    cycles: usize,
 }
 
 impl Bus {
@@ -101,7 +103,17 @@ impl Bus {
             cpu_vram: [0; 0x800],
             prg_rom: rom.prg_rom,
             ppu,
+            cycles: 0,
         }
+    }
+
+    pub fn tick(&mut self, cycles: usize) {
+        self.cycles += cycles;
+        self.ppu.tick(cycles * PPU_CYCLE_PER_CPU_CYCLE);
+    }
+
+    pub fn poll_nmi_interupted(&mut self) -> Option<u8> {
+        self.ppu.poll_nmi_interupted()
     }
 
     fn read_prg_rom(&self, mut addr: u16) -> u8 {

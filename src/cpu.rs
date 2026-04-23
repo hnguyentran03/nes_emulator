@@ -990,6 +990,8 @@ impl CPU {
                 // Unknown
                 _ => todo!("Unknown opcode: {:02x}", opcode.code),
             }
+            
+            self.bus.tick(opcode.cycles);
 
             if pc == self.program_counter {
                 self.program_counter += (opcode.bytes - 1) as u16
