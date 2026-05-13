@@ -25,7 +25,7 @@ const SCREEN_STATE_SIZE: u16 = 0x400; // 1 KiB
 
 const SCANLINES_PER_FRAME: u16 = 262;
 const CYCLES_PER_SCANLINE: usize = 341;
-const CYCLE_AT_NMI_INTERUPT: usize = 241;
+const CYCLE_AT_NMI_INTERUPT: u16 = 241;
 
 pub struct PPU {
     pub chr_rom: Vec<u8>,
