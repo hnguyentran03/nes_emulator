@@ -20,7 +20,7 @@ bitflags! {
 const STACK: u16 = 0x0100;
 const STACK_RESET: u8 = 0xFD;
 const RESET_VECTOR: u16 = 0xFFFC;
-// const INTERRUPT_VECTOR: u16 = 0xFFFE;
+const NMI_INTERRUPT_VECTOR: u16 = 0xFFFA;
 pub const PROGRAM_START: u16 = 0x8000;
 
 pub struct CPU {
@@ -834,6 +834,20 @@ impl CPU {
         // self.mem_write_u16(RESET_VECTOR, PROGRAM_START);
     }
 
+    fn interrupt_nmi(&mut self) {
+        self.stack_push_u16(self.program_counter);
+        let mut flags_clone = self.flags.clone();
+        flags_clone.set(CPUFlags::BREAK, false);
+        flags_clone.set(CPUFlags::BREAK2, true);
+
+        self.stack_push(flags_clone.bits());
+        self.flags.insert(CPUFlags::INTERRUPT);
+
+        self.bus.tick(2);
+        self.program_counter = self.mem_read_u16(NMI_INTERRUPT_VECTOR)
+
+    }
+
     pub fn run(&mut self) {
         self.run_with_callback(|_| {});
     }
@@ -843,6 +857,10 @@ impl CPU {
         let opcodes: &HashMap<u8, opcodes::OpCode> = &opcodes::OP_CODES;
 
         loop {
+            if let Some(_nmi) = self.bus.poll_nmi_interupted() {
+                self.interrupt_nmi();
+            }
+
             callback(self);
 
             let code = self.mem_read(self.program_counter);

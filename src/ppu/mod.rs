@@ -154,7 +154,11 @@ impl PPU {
     }
 
     pub fn write_to_control(&mut self, data: u8) {
+        let before_nmi_status = self.control.generate_vblank_nmi();
         self.control.update(data);
+        if !before_nmi_status && self.control.generate_vblank_nmi() && self.status.is_in_vblank() {
+            self.nmi_interupted = Some(1)
+        }
     }
 
     pub fn write_to_mask(&mut self, data: u8) {
