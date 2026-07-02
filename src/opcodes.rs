@@ -24,7 +24,7 @@ impl OpCode {
 lazy_static! {
     static ref OP_CODES_DEF: Vec<(&'static str, u8, u8, u8, AddressingMode)> = vec![
         // ADC: Add with Carry
-        ("ADC", 0x69, 2, 2, AddressingMode::Immedtiate),
+        ("ADC", 0x69, 2, 2, AddressingMode::Immediate),
         ("ADC", 0x65, 2, 3, AddressingMode::ZeroPage),
         ("ADC", 0x75, 2, 4, AddressingMode::ZeroPage_X),
         ("ADC", 0x6D, 3, 4, AddressingMode::Absolute),
@@ -34,7 +34,7 @@ lazy_static! {
         ("ADC", 0x71, 2, 5 /* +1 if page crossed */, AddressingMode::Indirect_Y),
 
         // AND: Logical AND
-        ("AND", 0x29, 2, 2, AddressingMode::Immedtiate),
+        ("AND", 0x29, 2, 2, AddressingMode::Immediate),
         ("AND", 0x25, 2, 3, AddressingMode::ZeroPage),
         ("AND", 0x35, 2, 4, AddressingMode::ZeroPage_X),
         ("AND", 0x2D, 3, 4, AddressingMode::Absolute),
@@ -94,7 +94,7 @@ lazy_static! {
         ("CLV", 0xB8, 1, 2, AddressingMode::Implied),
 
         // CMP: Compare
-        ("CMP", 0xC9, 2, 2, AddressingMode::Immedtiate),
+        ("CMP", 0xC9, 2, 2, AddressingMode::Immediate),
         ("CMP", 0xC5, 2, 3, AddressingMode::ZeroPage),
         ("CMP", 0xD5, 2, 4, AddressingMode::ZeroPage_X),
         ("CMP", 0xCD, 3, 4, AddressingMode::Absolute),
@@ -104,12 +104,12 @@ lazy_static! {
         ("CMP", 0xD1, 2, 5 /* +1 if page crossed */, AddressingMode::Indirect_Y),
 
         // CPX: Compare X Register
-        ("CPX", 0xE0, 2, 2, AddressingMode::Immedtiate),
+        ("CPX", 0xE0, 2, 2, AddressingMode::Immediate),
         ("CPX", 0xE4, 2, 3, AddressingMode::ZeroPage),
         ("CPX", 0xEC, 3, 4, AddressingMode::Absolute),
 
         // CPY: Compare Y Register
-        ("CPY", 0xC0, 2, 2, AddressingMode::Immedtiate),
+        ("CPY", 0xC0, 2, 2, AddressingMode::Immediate),
         ("CPY", 0xC4, 2, 3, AddressingMode::ZeroPage),
         ("CPY", 0xCC, 3, 4, AddressingMode::Absolute),
 
@@ -126,7 +126,7 @@ lazy_static! {
         ("DEY", 0x88, 1, 2, AddressingMode::Implied),
 
         // EOR: Exclusive OR
-        ("EOR", 0x49, 2, 2, AddressingMode::Immedtiate),
+        ("EOR", 0x49, 2, 2, AddressingMode::Immediate),
         ("EOR", 0x45, 2, 3, AddressingMode::ZeroPage),
         ("EOR", 0x55, 2, 4, AddressingMode::ZeroPage_X),
         ("EOR", 0x4D, 3, 4, AddressingMode::Absolute),
@@ -155,7 +155,7 @@ lazy_static! {
         ("JSR", 0x20, 3, 6, AddressingMode::Absolute),
 
         // LDA: Load Accumulator
-        ("LDA", 0xA9, 2, 2, AddressingMode::Immedtiate),
+        ("LDA", 0xA9, 2, 2, AddressingMode::Immediate),
         ("LDA", 0xA5, 2, 3, AddressingMode::ZeroPage),
         ("LDA", 0xB5, 2, 4, AddressingMode::ZeroPage_X),
         ("LDA", 0xAD, 3, 4, AddressingMode::Absolute),
@@ -165,14 +165,14 @@ lazy_static! {
         ("LDA", 0xB1, 2, 5 /* +1 if page crossed */, AddressingMode::Indirect_Y),
 
         // LDX: Load X Register
-        ("LDX", 0xA2, 2, 2, AddressingMode::Immedtiate),
+        ("LDX", 0xA2, 2, 2, AddressingMode::Immediate),
         ("LDX", 0xA6, 2, 3, AddressingMode::ZeroPage),
         ("LDX", 0xB6, 2, 4, AddressingMode::ZeroPage_Y),
         ("LDX", 0xAE, 3, 4, AddressingMode::Absolute),
         ("LDX", 0xBE, 3, 4 /* +1 if page crossed */, AddressingMode::Absolute_Y),
 
         // LDY: Load Y Register
-        ("LDY", 0xA0, 2, 2, AddressingMode::Immedtiate),
+        ("LDY", 0xA0, 2, 2, AddressingMode::Immediate),
         ("LDY", 0xA4, 2, 3, AddressingMode::ZeroPage),
         ("LDY", 0xB4, 2, 4, AddressingMode::ZeroPage_X),
         ("LDY", 0xAC, 3, 4, AddressingMode::Absolute),
@@ -189,7 +189,7 @@ lazy_static! {
         ("NOP", 0xEA, 1, 2, AddressingMode::Implied),
 
         // ORA: Logical Inclusive OR
-        ("ORA", 0x09, 2, 2, AddressingMode::Immedtiate),
+        ("ORA", 0x09, 2, 2, AddressingMode::Immediate),
         ("ORA", 0x05, 2, 3, AddressingMode::ZeroPage),
         ("ORA", 0x15, 2, 4, AddressingMode::ZeroPage_X),
         ("ORA", 0x0D, 3, 4, AddressingMode::Absolute),
@@ -231,7 +231,7 @@ lazy_static! {
         ("RTS", 0x60, 1, 6, AddressingMode::Implied),
 
         // SBC: Subtract with Carry
-        ("SBC", 0xE9, 2, 2, AddressingMode::Immedtiate),
+        ("SBC", 0xE9, 2, 2, AddressingMode::Immediate),
         ("SBC", 0xE5, 2, 3, AddressingMode::ZeroPage),
         ("SBC", 0xF5, 2, 4, AddressingMode::ZeroPage_X),
         ("SBC", 0xED, 3, 4, AddressingMode::Absolute),

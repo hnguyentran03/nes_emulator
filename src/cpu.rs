@@ -21,7 +21,27 @@ const STACK: u16 = 0x0100;
 const STACK_RESET: u8 = 0xFD;
 const RESET_VECTOR: u16 = 0xFFFC;
 const NMI_INTERRUPT_VECTOR: u16 = 0xFFFA;
+const IRQ_BRK_VECTOR: u16 = 0xFFFE;
 pub const PROGRAM_START: u16 = 0x8000;
+
+// Shared description of a 6502 interrupt sequence
+struct Interrupt {
+    vector: u16,
+    flag_mask: u8,
+    cycles: u8,
+}
+
+const NMI: Interrupt = Interrupt {
+    vector: NMI_INTERRUPT_VECTOR,
+    flag_mask: 0b0010_0000,
+    cycles: 7,
+};
+
+const IRQ: Interrupt = Interrupt {
+    vector: IRQ_BRK_VECTOR,
+    flag_mask: 0b0010_0000,
+    cycles: 7,
+};
 
 pub struct CPU {
     pub register_a: u8,
@@ -38,7 +58,7 @@ pub struct CPU {
 pub enum AddressingMode {
     Implied,
     Accumulator,
-    Immedtiate,
+    Immediate,
     ZeroPage,
     ZeroPage_X,
     ZeroPage_Y,
@@ -186,9 +206,10 @@ impl CPU {
 
             AddressingMode::Relative => {
                 let offset = self.mem_read(addr) as i8;
-                let result = self.program_counter
+                let result = self
+                    .program_counter
                     .wrapping_add(offset as u16)
-                    .wrapping_add(1); 
+                    .wrapping_add(1);
                 (result, page_cross(self.program_counter, result))
             }
 
@@ -212,7 +233,7 @@ impl CPU {
 
     fn get_operand_address(&mut self, mode: &AddressingMode) -> (u16, bool) {
         match mode {
-            AddressingMode::Immedtiate => (self.program_counter, false),
+            AddressingMode::Immediate => (self.program_counter, false),
 
             _ => self.get_absolute_address(mode, self.program_counter),
         }
@@ -250,7 +271,7 @@ impl CPU {
 
         if page_crossed {
             self.bus.tick(1);
-        }   
+        }
     }
 
     fn and(&mut self, mode: &AddressingMode) {
@@ -834,18 +855,17 @@ impl CPU {
         // self.mem_write_u16(RESET_VECTOR, PROGRAM_START);
     }
 
-    fn interrupt_nmi(&mut self) {
+    fn interrupt(&mut self, interrupt: &Interrupt) {
         self.stack_push_u16(self.program_counter);
-        let mut flags_clone = self.flags.clone();
-        flags_clone.set(CPUFlags::BREAK, false);
-        flags_clone.set(CPUFlags::BREAK2, true);
 
-        self.stack_push(flags_clone.bits());
+        let mut flags = self.flags;
+        flags.set(CPUFlags::BREAK, interrupt.flag_mask & CPUFlags::BREAK.bits() != 0);
+        flags.set(CPUFlags::BREAK2, interrupt.flag_mask & CPUFlags::BREAK2.bits() != 0);
+        self.stack_push(flags.bits());
+
         self.flags.insert(CPUFlags::INTERRUPT);
-
-        self.bus.tick(2);
-        self.program_counter = self.mem_read_u16(NMI_INTERRUPT_VECTOR)
-
+        self.bus.tick(interrupt.cycles as usize);
+        self.program_counter = self.mem_read_u16(interrupt.vector);
     }
 
     pub fn run(&mut self) {
@@ -857,8 +877,11 @@ impl CPU {
         let opcodes: &HashMap<u8, opcodes::OpCode> = &opcodes::OP_CODES;
 
         loop {
-            if let Some(_nmi) = self.bus.poll_nmi_interupted() {
-                self.interrupt_nmi();
+            // NMI takes priority over IRQ
+            if self.bus.poll_nmi_interupted().is_some() {
+                self.interrupt(&NMI);
+            } else if self.bus.poll_irq() && !self.flags.contains(CPUFlags::INTERRUPT) {
+                self.interrupt(&IRQ);
             }
 
             callback(self);
@@ -1046,8 +1069,8 @@ impl CPU {
                 // Unknown
                 _ => todo!("Unknown opcode: {:02x}", opcode.code),
             }
-            
-            self.bus.tick(opcode.cycles as usize);
+
+            self.bus.tick(opcode.cycles.into());
 
             if pc == self.program_counter {
                 self.program_counter += (opcode.bytes - 1) as u16
@@ -1061,6 +1084,7 @@ mod test {
     use super::*;
     use crate::bus::Bus;
     use crate::rom::test::build_test_rom;
+    use crate::rom::{Rom, CHR_ROM_PAGE_SIZE, PRG_ROM_PAGE_SIZE};
 
     #[test]
     fn adc_immediate_adds_with_carry() {
@@ -1945,5 +1969,125 @@ mod test {
         cpu.run();
 
         assert_eq!(cpu.register_x, 0xC1);
+    }
+
+    // Builds a 2-bank (32 KiB) PRG image from `prg` and points the NMI (0xFFFA)
+    // and IRQ/BRK (0xFFFE) vectors at the given handler addresses. RESET is left
+    // zero; tests start at PROGRAM_START without calling reset().
+    fn rom_with_vectors(prg: Vec<u8>, nmi_handler: u16, irq_handler: u16) -> Rom {
+        let mut image = prg;
+        image.resize(2 * PRG_ROM_PAGE_SIZE, 0);
+
+        let put = |image: &mut [u8], vector: u16, handler: u16| {
+            let off = (vector - PROGRAM_START) as usize;
+            image[off] = (handler & 0xFF) as u8;
+            image[off + 1] = (handler >> 8) as u8;
+        };
+        put(&mut image, NMI_INTERRUPT_VECTOR, nmi_handler);
+        put(&mut image, IRQ_BRK_VECTOR, irq_handler);
+
+        let mut data = vec![
+            0x4E, 0x45, 0x53, 0x1A, 0x02, 0x01, 0x31, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
+        data.extend_from_slice(&image);
+        data.extend(std::iter::repeat(0u8).take(CHR_ROM_PAGE_SIZE));
+        Rom::new(&data).unwrap()
+    }
+
+    #[test]
+    fn interrupt_pushes_status_and_jumps_through_vector() {
+        let rom = rom_with_vectors(vec![], 0, 0x9000);
+        let mut cpu = CPU::new(Bus::new(rom));
+
+        let sp_before = cpu.stack_ptr;
+        cpu.interrupt(&IRQ);
+
+        assert_eq!(cpu.program_counter, 0x9000);
+        assert!(cpu.flags.contains(CPUFlags::INTERRUPT));
+        assert_eq!(cpu.stack_ptr, sp_before.wrapping_sub(3));
+
+        let pushed_status = cpu.mem_read(STACK + cpu.stack_ptr.wrapping_add(1) as u16);
+        assert_eq!(pushed_status & CPUFlags::BREAK.bits(), 0);
+        assert_ne!(pushed_status & CPUFlags::BREAK2.bits(), 0);
+    }
+
+    #[test]
+    fn irq_is_masked_while_interrupt_flag_set() {
+        let mut prg = vec![0u8; 2 * PRG_ROM_PAGE_SIZE];
+        prg[0x0000..0x0005].copy_from_slice(&[0xA9, 0x01, 0x85, 0x11, 0x00]);
+        prg[0x1000..0x1005].copy_from_slice(&[0xA9, 0xEE, 0x85, 0x10, 0x00]);
+
+        let rom = rom_with_vectors(prg, 0, 0x9000);
+        let mut cpu = CPU::new(Bus::new(rom));
+        assert!(cpu.flags.contains(CPUFlags::INTERRUPT));
+
+        cpu.bus.set_irq(true);
+        cpu.run();
+
+        assert_eq!(cpu.mem_read(0x11), 0x01); // main ran
+        assert_eq!(cpu.mem_read(0x10), 0x00); // handler did not
+    }
+
+    #[test]
+    fn irq_vectors_once_interrupt_flag_cleared() {
+        let mut prg = vec![0u8; 2 * PRG_ROM_PAGE_SIZE];
+        prg[0x0000..0x0002].copy_from_slice(&[0x58, 0x00]);
+        prg[0x1000..0x1005].copy_from_slice(&[0xA9, 0xEE, 0x85, 0x10, 0x00]);
+
+        let rom = rom_with_vectors(prg, 0, 0x9000);
+        let mut cpu = CPU::new(Bus::new(rom));
+
+        cpu.bus.set_irq(true);
+        cpu.run();
+
+        assert_eq!(cpu.mem_read(0x10), 0xEE);
+        assert!(cpu.flags.contains(CPUFlags::INTERRUPT));
+    }
+
+    #[test]
+    fn nmi_at_vblank_vectors_through_fffa() {
+        // Full path: the CPU spins in a JMP-to-self loop while the bus ticks the
+        // PPU forward; at scanline 241 the PPU raises an NMI, which the run loop
+        // polls and services by vectoring through 0xFFFA.
+        // Main @ 0x8000: LDA #$80, STA $2000 (enable vblank NMI), JMP $8005 (spin).
+        // Handler @ 0x9000: LDA #$EE, STA $10, BRK (records arrival and halts).
+        let mut prg = vec![0u8; 2 * PRG_ROM_PAGE_SIZE];
+        prg[0x0000..0x0008].copy_from_slice(&[
+            0xA9, 0x80, 0x8D, 0x00, 0x20, 0x4C, 0x05, 0x80,
+        ]);
+        prg[0x1000..0x1005].copy_from_slice(&[0xA9, 0xEE, 0x85, 0x10, 0x00]);
+
+        let rom = rom_with_vectors(prg, 0x9000, 0);
+        let mut cpu = CPU::new(Bus::new(rom));
+        cpu.run();
+
+        assert_eq!(cpu.mem_read(0x10), 0xEE); // NMI handler ran
+        assert!(cpu.flags.contains(CPUFlags::INTERRUPT)); // disabled on entry
+    }
+
+    #[test]
+    fn nmi_from_control_write_during_vblank_reaches_cpu() {
+        // Enabling NMI via a PPUCTRL write *while already in vblank* must raise an
+        // NMI immediately, and that NMI must reach the CPU. Handler @ 0x9000
+        // records arrival and halts.
+        let mut prg = vec![0u8; 2 * PRG_ROM_PAGE_SIZE];
+        prg[0x1000..0x1005].copy_from_slice(&[0xA9, 0xEE, 0x85, 0x10, 0x00]);
+
+        let rom = rom_with_vectors(prg, 0x9000, 0);
+        let mut cpu = CPU::new(Bus::new(rom));
+
+        // Advance to scanline 241 with NMI disabled: sets the vblank flag but
+        // raises no NMI. tick() advances one scanline per call, and each CPU
+        // cycle is 3 PPU cycles, so 114 CPU cycles (342 PPU) crosses one line.
+        for _ in 0..241 {
+            cpu.bus.tick(114);
+        }
+
+        // Now enable NMI mid-vblank; write_to_control raises it on the spot.
+        cpu.mem_write(0x2000, 0x80);
+        cpu.run();
+
+        assert_eq!(cpu.mem_read(0x10), 0xEE);
     }
 }

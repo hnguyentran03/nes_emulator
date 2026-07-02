@@ -18,7 +18,7 @@ fn get_mem_str(
     match opcode.mode {
         AddressingMode::Implied => String::from(""),
         AddressingMode::Accumulator => String::from("A "),
-        AddressingMode::Immedtiate => format!("#${:02x}", addr),
+        AddressingMode::Immediate => format!("#${:02x}", addr),
         AddressingMode::Relative => {
             let new_addr = (pc + 2).wrapping_add((addr as i8) as u16);
             format!("${:04x}", new_addr)
@@ -78,7 +78,7 @@ pub fn trace(cpu: &mut CPU) -> String {
     let (mem_addr, mem_data) = match opcode.mode {
         AddressingMode::Implied
         | AddressingMode::Accumulator
-        | AddressingMode::Immedtiate
+        | AddressingMode::Immediate
         | AddressingMode::Relative
         | AddressingMode::Indirect => (0, 0),
         _ => {

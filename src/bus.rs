@@ -93,6 +93,7 @@ pub struct Bus {
     prg_rom: Vec<u8>,
     ppu: PPU,
     cycles: usize,
+    irq_line: bool,
 }
 
 impl Bus {
@@ -104,6 +105,7 @@ impl Bus {
             prg_rom: rom.prg_rom,
             ppu,
             cycles: 0,
+            irq_line: false,
         }
     }
 
@@ -114,6 +116,14 @@ impl Bus {
 
     pub fn poll_nmi_interupted(&mut self) -> Option<u8> {
         self.ppu.poll_nmi_interupted()
+    }
+
+    pub fn poll_irq(&mut self) -> bool {
+        self.irq_line
+    }
+
+    pub fn set_irq(&mut self, level: bool) {
+        self.irq_line = level;
     }
 
     fn read_prg_rom(&self, mut addr: u16) -> u8 {
