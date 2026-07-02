@@ -14,6 +14,12 @@ bitflags! {
     }
 }
 
+impl Default for ControlRegister {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ControlRegister {
     pub fn new() -> Self {
         ControlRegister::from_bits_truncate(0b0000_0000)

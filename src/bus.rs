@@ -231,10 +231,7 @@ mod test {
     #[test]
     fn ppu_addr_and_data_reach_vram_through_bus() {
         let mut bus = Bus::new(build_test_rom(vec![]));
-        bus.mem_write(
-            CONTROL_REGISTER,
-            ControlRegister::VRAM_ADD_INCREMENT.bits(),
-        );
+        bus.mem_write(CONTROL_REGISTER, ControlRegister::VRAM_ADD_INCREMENT.bits());
         bus.mem_write(PPU_ADDR, 0x20);
         bus.mem_write(PPU_ADDR, 0x00);
         bus.mem_write(PPU_DATA, 0xEE);

@@ -8,6 +8,12 @@ pub struct AddrRegister {
     pub hi_ptr: bool,
 }
 
+impl Default for AddrRegister {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AddrRegister {
     pub fn new() -> Self {
         AddrRegister {

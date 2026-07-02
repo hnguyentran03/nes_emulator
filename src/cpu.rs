@@ -859,8 +859,14 @@ impl CPU {
         self.stack_push_u16(self.program_counter);
 
         let mut flags = self.flags;
-        flags.set(CPUFlags::BREAK, interrupt.flag_mask & CPUFlags::BREAK.bits() != 0);
-        flags.set(CPUFlags::BREAK2, interrupt.flag_mask & CPUFlags::BREAK2.bits() != 0);
+        flags.set(
+            CPUFlags::BREAK,
+            interrupt.flag_mask & CPUFlags::BREAK.bits() != 0,
+        );
+        flags.set(
+            CPUFlags::BREAK2,
+            interrupt.flag_mask & CPUFlags::BREAK2.bits() != 0,
+        );
         self.stack_push(flags.bits());
 
         self.flags.insert(CPUFlags::INTERRUPT);
@@ -1084,7 +1090,7 @@ mod test {
     use super::*;
     use crate::bus::Bus;
     use crate::rom::test::build_test_rom;
-    use crate::rom::{Rom, CHR_ROM_PAGE_SIZE, PRG_ROM_PAGE_SIZE};
+    use crate::rom::{CHR_ROM_PAGE_SIZE, PRG_ROM_PAGE_SIZE, Rom};
 
     #[test]
     fn adc_immediate_adds_with_carry() {
@@ -2053,9 +2059,7 @@ mod test {
         // Main @ 0x8000: LDA #$80, STA $2000 (enable vblank NMI), JMP $8005 (spin).
         // Handler @ 0x9000: LDA #$EE, STA $10, BRK (records arrival and halts).
         let mut prg = vec![0u8; 2 * PRG_ROM_PAGE_SIZE];
-        prg[0x0000..0x0008].copy_from_slice(&[
-            0xA9, 0x80, 0x8D, 0x00, 0x20, 0x4C, 0x05, 0x80,
-        ]);
+        prg[0x0000..0x0008].copy_from_slice(&[0xA9, 0x80, 0x8D, 0x00, 0x20, 0x4C, 0x05, 0x80]);
         prg[0x1000..0x1005].copy_from_slice(&[0xA9, 0xEE, 0x85, 0x10, 0x00]);
 
         let rom = rom_with_vectors(prg, 0x9000, 0);

@@ -19,6 +19,12 @@ pub enum Color {
     Blue,
 }
 
+impl Default for MaskRegister {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MaskRegister {
     pub fn new() -> Self {
         MaskRegister::from_bits_truncate(0b00000000)

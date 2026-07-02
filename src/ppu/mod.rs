@@ -84,7 +84,7 @@ impl PPU {
                     self.nmi_interupted = Some(1);
                 }
             }
-    
+
             if self.scanlines >= SCANLINES_PER_FRAME {
                 self.scanlines = 0;
                 self.nmi_interupted = None;
@@ -93,7 +93,6 @@ impl PPU {
                 return true;
             }
         }
-
 
         false
     }
@@ -523,4 +522,3 @@ mod tests {
         assert_eq!(ppu.mirror_vram_addr(0x2C00), 0x400);
     }
 }
-
