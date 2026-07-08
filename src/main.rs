@@ -4,6 +4,7 @@ pub mod opcodes;
 pub mod ppu;
 pub mod render;
 pub mod rom;
+pub mod tile_viewer;
 pub mod trace;
 
 use bus::Bus;
@@ -83,7 +84,7 @@ fn handle_user_input(cpu: &mut CPU, event_pump: &mut EventPump) {
     }
 }
 
-fn main() {
+fn run_snake(rom_path: String) {
     // Initialize SDL2 for the graphics
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -101,17 +102,11 @@ fn main() {
         .create_texture_static(PixelFormatEnum::RGB24, 32, 32)
         .unwrap();
 
-    // Get the ROM path from the command line arguments and run the ROM
-    let rom_path = std::env::args()
-        .nth(1)
-        .map(std::path::PathBuf::from)
-        .unwrap();
-
     let rom_data = std::fs::read(&rom_path).unwrap();
 
     let rom = Rom::new(&rom_data).unwrap();
     let bus = Bus::new(rom);
-    let mut cpu = cpu::CPU::new(bus);
+    let mut cpu = CPU::new(bus);
     cpu.reset();
 
     let mut screen = [0; 32 * 3 * 32];
@@ -131,4 +126,18 @@ fn main() {
 
         std::thread::sleep(std::time::Duration::new(0, 70_000));
     });
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    match args.get(1).map(String::as_str) {
+        Some("snake") => {
+            let rom = args
+                .get(2)
+                .cloned()
+                .unwrap_or_else(|| "roms/snake.nes".to_string());
+            run_snake(rom);
+        }
+        _ => tile_viewer::run(),
+    }
 }
