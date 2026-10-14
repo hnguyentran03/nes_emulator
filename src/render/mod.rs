@@ -308,6 +308,7 @@ mod test {
     fn alter_ego_renders_frames_without_panicking() {
         use crate::bus::Bus;
         use crate::cpu::CPU;
+        use crate::joypad::Joypad;
         use crate::rom::Rom;
         use std::cell::Cell;
 
@@ -318,7 +319,7 @@ mod test {
         let frames = Cell::new(0u32);
         let mut frame = Frame::new();
         let non_background_pixels = Cell::new(0usize);
-        let bus = Bus::new(rom, |ppu: &PPU| {
+        let bus = Bus::new(rom, |ppu: &PPU, _joypad: &mut Joypad| {
             render(ppu, &mut frame);
             let bg = system_color(ppu.palette_table[0]);
             let visible = frame

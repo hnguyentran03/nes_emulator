@@ -1,5 +1,6 @@
 pub mod bus;
 pub mod cpu;
+pub mod joypad;
 pub mod opcodes;
 pub mod ppu;
 pub mod render;
@@ -10,9 +11,11 @@ pub mod trace;
 use bus::Bus;
 use cpu::CPU;
 use cpu::Mem;
+use joypad::{Joypad, JoypadButton};
 use ppu::PPU;
 use render::frame::Frame;
 use rom::Rom;
+use std::collections::HashMap;
 
 #[macro_use]
 extern crate bitflags;
@@ -107,7 +110,7 @@ fn run_snake(rom_path: String) {
     let rom_data = std::fs::read(&rom_path).unwrap();
 
     let rom = Rom::new(&rom_data).unwrap();
-    let bus = Bus::new(rom, |_| {});
+    let bus = Bus::new(rom, |_, _| {});
     let mut cpu = CPU::new(bus);
     cpu.reset();
 
@@ -128,6 +131,20 @@ fn run_snake(rom_path: String) {
 
         std::thread::sleep(std::time::Duration::new(0, 70_000));
     });
+}
+
+// Host keyboard -> NES controller 1.
+fn joypad_key_map() -> HashMap<Keycode, JoypadButton> {
+    HashMap::from([
+        (Keycode::Up, JoypadButton::UP),
+        (Keycode::Down, JoypadButton::DOWN),
+        (Keycode::Left, JoypadButton::LEFT),
+        (Keycode::Right, JoypadButton::RIGHT),
+        (Keycode::Space, JoypadButton::SELECT),
+        (Keycode::Return, JoypadButton::START),
+        (Keycode::A, JoypadButton::BUTTON_A),
+        (Keycode::S, JoypadButton::BUTTON_B),
+    ])
 }
 
 const GAME_SCALE: f32 = 3.0;
@@ -166,8 +183,9 @@ fn run_game(rom_path: String) {
     let rom = Rom::new(&rom_data).unwrap();
 
     let mut frame = Frame::new();
+    let key_map = joypad_key_map();
 
-    let bus = Bus::new(rom, move |ppu: &PPU| {
+    let bus = Bus::new(rom, move |ppu: &PPU, joypad: &mut Joypad| {
         render::render(ppu, &mut frame);
         texture.update(None, &frame.data, Frame::WIDTH * 3).unwrap();
         canvas.copy(&texture, None, None).unwrap();
@@ -180,6 +198,22 @@ fn run_game(rom_path: String) {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => std::process::exit(0),
+                Event::KeyDown {
+                    keycode: Some(keycode),
+                    ..
+                } => {
+                    if let Some(button) = key_map.get(&keycode) {
+                        joypad.set_button_pressed_status(*button, true);
+                    }
+                }
+                Event::KeyUp {
+                    keycode: Some(keycode),
+                    ..
+                } => {
+                    if let Some(button) = key_map.get(&keycode) {
+                        joypad.set_button_pressed_status(*button, false);
+                    }
+                }
                 _ => {}
             }
         }

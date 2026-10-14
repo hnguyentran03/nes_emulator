@@ -1,4 +1,5 @@
 use crate::cpu::Mem;
+use crate::joypad::Joypad;
 use crate::ppu::PPU;
 use crate::ppu::PPU_REGISTERS_END;
 use crate::rom::Rom;
@@ -18,6 +19,8 @@ const SCROLL_REGISTER: u16 = 0x2005;
 const PPU_ADDR: u16 = 0x2006;
 const PPU_DATA: u16 = 0x2007;
 const OAM_DMA: u16 = 0x4014;
+const JOYPAD_1: u16 = 0x4016;
+const JOYPAD_2: u16 = 0x4017;
 const PPU_MEM: u16 = 0x2008;
 const PPU_MEM_END: u16 = PPU_REGISTERS_END;
 
@@ -41,6 +44,10 @@ impl Mem for Bus<'_> {
             OAM_DATA => self.ppu.read_oam_data(),
 
             PPU_DATA => self.ppu.read_data(),
+
+            JOYPAD_1 => self.joypad1.read(),
+
+            JOYPAD_2 => 0, // second controller not emulated
 
             PPU_MEM..=PPU_REGISTERS_END => {
                 let mirror_addr = addr & PPU_MIRROR_MASK;
@@ -88,6 +95,12 @@ impl Mem for Bus<'_> {
 
             PPU_DATA => self.ppu.write_to_data(data),
 
+            // Bit 0 is the controller strobe; the same write also reaches
+            // joypad 2, which is not emulated.
+            JOYPAD_1 => self.joypad1.write(data),
+
+            JOYPAD_2 => { /* APU frame counter / joypad 2 strobe: ignored */ }
+
             PPU_MEM..=PPU_MEM_END => {
                 let mirror_addr = addr & PPU_MIRROR_MASK;
                 self.mem_write(mirror_addr, data);
@@ -100,19 +113,23 @@ impl Mem for Bus<'_> {
     }
 }
 
+// Invoked once per frame, on the rising edge of the PPU's vblank NMI.
+pub type GameloopCallback<'call> = Box<dyn FnMut(&PPU, &mut Joypad) + 'call>;
+
 pub struct Bus<'call> {
     cpu_vram: [u8; 0x800],
     prg_rom: Vec<u8>,
     ppu: PPU,
     cycles: usize,
     irq_line: bool,
-    gameloop_callback: Box<dyn FnMut(&PPU) + 'call>,
+    joypad1: Joypad,
+    gameloop_callback: GameloopCallback<'call>,
 }
 
 impl<'call> Bus<'call> {
     pub fn new<F>(rom: Rom, gameloop_callback: F) -> Self
     where
-        F: FnMut(&PPU) + 'call,
+        F: FnMut(&PPU, &mut Joypad) + 'call,
     {
         let ppu = PPU::new(rom.chr_rom, rom.screen_mirror);
 
@@ -122,6 +139,7 @@ impl<'call> Bus<'call> {
             ppu,
             cycles: 0,
             irq_line: false,
+            joypad1: Joypad::new(),
             gameloop_callback: Box::from(gameloop_callback),
         }
     }
@@ -134,7 +152,7 @@ impl<'call> Bus<'call> {
         let nmi_after = self.ppu.nmi_interrupted.is_some();
 
         if !nmi_before && nmi_after {
-            (self.gameloop_callback)(&self.ppu);
+            (self.gameloop_callback)(&self.ppu, &mut self.joypad1);
         }
     }
 
@@ -165,6 +183,7 @@ impl<'call> Bus<'call> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::joypad::JoypadButton;
     use crate::ppu::registers::control::ControlRegister;
     use crate::ppu::registers::status::StatusRegister;
     use crate::rom::CHR_ROM_PAGE_SIZE;
@@ -192,9 +211,12 @@ mod test {
 
         let frames = Rc::new(Cell::new(0));
         let counter = Rc::clone(&frames);
-        let mut bus = Bus::new(build_test_rom(vec![]), move |_ppu: &PPU| {
-            counter.set(counter.get() + 1);
-        });
+        let mut bus = Bus::new(
+            build_test_rom(vec![]),
+            move |_ppu: &PPU, _joypad: &mut Joypad| {
+                counter.set(counter.get() + 1);
+            },
+        );
 
         // Tick a couple of CPU cycles at a time (like the run loop does) for
         // one full frame: 341 PPU cycles x 262 scanlines = 89342 PPU cycles.
@@ -217,14 +239,14 @@ mod test {
 
     #[test]
     fn test_mem_read_write_to_ram() {
-        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
+        let mut bus = Bus::new(build_test_rom(vec![]), |_, _| {});
         bus.mem_write(0x01, 0x55);
         assert_eq!(bus.mem_read(0x01), 0x55);
     }
 
     #[test]
     fn ram_mirrors_at_2k_boundary() {
-        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
+        let mut bus = Bus::new(build_test_rom(vec![]), |_, _| {});
         bus.mem_write(0x0001, 0xAA);
         bus.mem_write(0x0801, 0xBB);
         assert_eq!(bus.mem_read(0x0001), 0xBB);
@@ -234,14 +256,14 @@ mod test {
 
     #[test]
     fn prg_rom_read_two_banks() {
-        let mut bus = Bus::new(build_test_rom(vec![0xEA, 0x4C, 0x00, 0x80]), |_| {});
+        let mut bus = Bus::new(build_test_rom(vec![0xEA, 0x4C, 0x00, 0x80]), |_, _| {});
         assert_eq!(bus.mem_read(PRG_ROM), 0xEA);
         assert_eq!(bus.mem_read(PRG_ROM + 0x4000), bus.prg_rom[0x4000]);
     }
 
     #[test]
     fn prg_rom_single_bank_mirrors_into_c000() {
-        let mut bus = Bus::new(single_bank_test_rom(0xAB), |_| {});
+        let mut bus = Bus::new(single_bank_test_rom(0xAB), |_, _| {});
         assert_eq!(bus.mem_read(PRG_ROM), 0xAB);
         assert_eq!(bus.mem_read(0xC000), 0xAB);
         assert_eq!(bus.mem_read(PRG_ROM + 0x0123), 0x77);
@@ -250,13 +272,13 @@ mod test {
 
     #[test]
     fn unmapped_read_returns_open_bus_zero() {
-        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
+        let mut bus = Bus::new(build_test_rom(vec![]), |_, _| {});
         assert_eq!(bus.mem_read(0x5000), 0);
     }
 
     #[test]
     fn ppu_mirrored_register_write_aliases_base_port() {
-        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
+        let mut bus = Bus::new(build_test_rom(vec![]), |_, _| {});
         bus.mem_write(0x2008, 0x80);
         bus.mem_write(0x2018, 0x80);
         assert_eq!(bus.ppu.control.bits(), 0x80);
@@ -264,7 +286,7 @@ mod test {
 
     #[test]
     fn ppu_status_read_via_cpu_and_clears_vblank() {
-        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
+        let mut bus = Bus::new(build_test_rom(vec![]), |_, _| {});
         bus.ppu.status.set_vblank_status(true);
         let raw = bus.mem_read(STATUS_REGISTER);
         assert_ne!(raw & StatusRegister::VBLANK_STARTED.bits(), 0);
@@ -273,7 +295,7 @@ mod test {
 
     #[test]
     fn ppu_oam_data_write_through_2004_auto_increments() {
-        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
+        let mut bus = Bus::new(build_test_rom(vec![]), |_, _| {});
         bus.mem_write(OAM_ADDR, 0x02);
         bus.mem_write(OAM_DATA, 0x11);
         bus.mem_write(OAM_DATA, 0x22);
@@ -286,7 +308,7 @@ mod test {
 
     #[test]
     fn ppu_oam_dma_4014_copies_a_cpu_ram_page_into_oam() {
-        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
+        let mut bus = Bus::new(build_test_rom(vec![]), |_, _| {});
         for i in 0..0x100u16 {
             bus.mem_write(0x0200 + i, i as u8);
         }
@@ -300,8 +322,52 @@ mod test {
     }
 
     #[test]
+    fn joypad1_strobe_protocol_through_4016() {
+        let mut bus = Bus::new(build_test_rom(vec![]), |_, _| {});
+        bus.joypad1
+            .set_button_pressed_status(JoypadButton::BUTTON_A, true);
+        bus.joypad1
+            .set_button_pressed_status(JoypadButton::START, true);
+        bus.joypad1
+            .set_button_pressed_status(JoypadButton::LEFT, true);
+
+        bus.mem_write(JOYPAD_1, 1);
+        bus.mem_write(JOYPAD_1, 0);
+        // A, B, Select, Start, Up, Down, Left, Right
+        let expected = [1, 0, 0, 1, 0, 0, 1, 0];
+        for want in expected {
+            assert_eq!(bus.mem_read(JOYPAD_1), want);
+        }
+        assert_eq!(bus.mem_read(JOYPAD_1), 1);
+    }
+
+    #[test]
+    fn joypad2_reads_zero_and_ignores_writes() {
+        let mut bus = Bus::new(build_test_rom(vec![]), |_, _| {});
+        bus.mem_write(JOYPAD_2, 1);
+        bus.mem_write(JOYPAD_2, 0);
+        assert_eq!(bus.mem_read(JOYPAD_2), 0);
+    }
+
+    #[test]
+    fn gameloop_callback_can_press_buttons_seen_on_next_read() {
+        let mut bus = Bus::new(build_test_rom(vec![]), |_ppu, joypad| {
+            joypad.set_button_pressed_status(JoypadButton::BUTTON_B, true);
+        });
+        bus.mem_write(CONTROL_REGISTER, ControlRegister::GENERATE_NMI.bits());
+        for _ in 0..(341 * 262 / PPU_CYCLE_PER_CPU_CYCLE / 2 + 1) {
+            bus.tick(2);
+            bus.poll_nmi_interrupted();
+        }
+        bus.mem_write(JOYPAD_1, 1);
+        bus.mem_write(JOYPAD_1, 0);
+        assert_eq!(bus.mem_read(JOYPAD_1), 0); // A
+        assert_eq!(bus.mem_read(JOYPAD_1), 1); // B
+    }
+
+    #[test]
     fn ppu_addr_and_data_reach_vram_through_bus() {
-        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
+        let mut bus = Bus::new(build_test_rom(vec![]), |_, _| {});
         bus.mem_write(CONTROL_REGISTER, ControlRegister::VRAM_ADD_INCREMENT.bits());
         bus.mem_write(PPU_ADDR, 0x20);
         bus.mem_write(PPU_ADDR, 0x00);
@@ -312,21 +378,21 @@ mod test {
     #[test]
     #[should_panic(expected = "Attempt to read from write-only PPU address 2000")]
     fn panic_on_read_write_only_ppu_control() {
-        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
+        let mut bus = Bus::new(build_test_rom(vec![]), |_, _| {});
         let _ = bus.mem_read(CONTROL_REGISTER);
     }
 
     #[test]
     #[should_panic(expected = "attempt to write to PPU status register")]
     fn panic_on_write_ppu_status() {
-        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
+        let mut bus = Bus::new(build_test_rom(vec![]), |_, _| {});
         bus.mem_write(STATUS_REGISTER, 0);
     }
 
     #[test]
     #[should_panic(expected = "Attempting to write to PRG ROM")]
     fn panic_on_write_prg_rom() {
-        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
+        let mut bus = Bus::new(build_test_rom(vec![]), |_, _| {});
         bus.mem_write(PRG_ROM, 0xFF);
     }
 }
