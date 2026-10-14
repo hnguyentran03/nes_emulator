@@ -1,13 +1,19 @@
 pub mod frame;
 pub mod palette;
 
-use crate::ppu::PPU;
+use crate::ppu::{PPU, ScrollState, tile_pixel};
 use frame::Frame;
+use std::ops::Range;
 
-const NUM_TILES: usize = 960; // 32 x 30 tiles in one nametable
 const TILES_PER_ROW: usize = 32;
-const TILE_SIZE: usize = 16;
+const TILES_PER_COLUMN: usize = 30;
+const NAMETABLE_SIZE: usize = 0x400; // 960 tile indices + 64 attribute bytes
 const ATTRIBUTE_TABLE_START: usize = 0x3C0; // the 64 bytes after the 960 tile indices
+const NAMETABLE_WIDTH: usize = TILES_PER_ROW * 8; // 256 px
+const NAMETABLE_HEIGHT: usize = TILES_PER_COLUMN * 8; // 240 px
+// XOR-ing these into a nametable address selects the horizontal / vertical neighbour.
+const NAMETABLE_RIGHT: u16 = 0x400;
+const NAMETABLE_BELOW: u16 = 0x800;
 const SPRITE_PALETTE_START: usize = 0x11; // sprite palettes occupy $3F11-$3F1F
 const OAM_ENTRY_SIZE: usize = 4;
 const SPRITE_FLIP_VERTICAL: u8 = 0b1000_0000;
@@ -19,27 +25,12 @@ fn system_color(palette_byte: u8) -> (u8, u8, u8) {
     palette::SYSTEM_PALLETE[(palette_byte & 0x3F) as usize]
 }
 
-// Returns the 16-byte CHR tile, or None if it falls outside the ROM.
-fn tile(chr_rom: &[u8], bank: usize, tile_n: usize) -> Option<&[u8]> {
-    let start = bank + tile_n * TILE_SIZE;
-    chr_rom.get(start..start + TILE_SIZE)
-}
-
-// Colour index (0..=3) of pixel (x, y) within a tile. Plane 0 (`tile[y]`) is
-// the low bit, plane 1 (`tile[y + 8]`) the high bit; bit 7 is the leftmost pixel.
-fn tile_pixel(tile: &[u8], x: usize, y: usize) -> u8 {
-    let shift = 7 - x;
-    let lower = (tile[y] >> shift) & 1;
-    let upper = (tile[y + 8] >> shift) & 1;
-    (upper << 1) | lower
-}
-
 // One attribute byte covers a 4x4-tile block, split into four 2x2-tile
 // quadrants; each 2-bit field selects one of the four background palettes.
 // https://www.nesdev.org/wiki/PPU_attribute_tables
-fn bg_palette(ppu: &PPU, tile_column: usize, tile_row: usize) -> [u8; 4] {
+fn bg_palette(ppu: &PPU, attribute_table: &[u8], tile_column: usize, tile_row: usize) -> [u8; 4] {
     let attr_table_idx = tile_row / 4 * 8 + tile_column / 4;
-    let attr_byte = ppu.vram[ATTRIBUTE_TABLE_START + attr_table_idx];
+    let attr_byte = attribute_table[attr_table_idx];
 
     let palette_idx = match (tile_column % 4 / 2, tile_row % 4 / 2) {
         (0, 0) => attr_byte & 0b11,
@@ -69,27 +60,170 @@ fn sprite_palette(ppu: &PPU, palette_idx: u8) -> [u8; 4] {
     ]
 }
 
-// Draws nametable 0 into `frame` using the background pattern table and the
-// attribute table to pick each tile's palette. Pixel value 0 always shows
-// the universal background colour at $3F00.
-fn render_background(ppu: &PPU, frame: &mut Frame) {
-    let bank = ppu.control.get_background_pattern_addr() as usize;
-    for i in 0..NUM_TILES {
-        let tile_column = i % TILES_PER_ROW;
-        let tile_row = i / TILES_PER_ROW;
-        let Some(tile) = tile(&ppu.chr_rom, bank, ppu.vram[i] as usize) else {
-            continue;
-        };
-        let palette = bg_palette(ppu, tile_column, tile_row);
+// A half-open rectangle in nametable pixel space (0..256 x 0..240).
+#[derive(Clone, Copy)]
+struct Viewport {
+    x1: usize,
+    y1: usize,
+    x2: usize,
+    y2: usize,
+}
 
-        for y in 0..8 {
-            for x in 0..8 {
-                let value = tile_pixel(tile, x, y);
-                let color = system_color(palette[value as usize]);
-                frame.set_pixel(tile_column * 8 + x, tile_row * 8 + y, color);
+impl Viewport {
+    fn is_empty(&self) -> bool {
+        self.x1 >= self.x2 || self.y1 >= self.y2
+    }
+
+    // Keeps only the part that lands on screen rows `rows` after shifting by `shift_y`.
+    fn clip_to_screen_rows(self, rows: &Range<usize>, shift_y: isize) -> Viewport {
+        let to_nametable = |screen_y: usize| (screen_y as isize - shift_y).max(0) as usize;
+        Viewport {
+            y1: self.y1.max(to_nametable(rows.start)),
+            y2: self.y2.min(to_nametable(rows.end)),
+            ..self
+        }
+    }
+}
+
+// The 1 KiB nametable that the PPU address `addr` resolves to after mirroring.
+fn nametable_at(ppu: &PPU, addr: u16) -> &[u8] {
+    let start = ppu.mirror_vram_addr(addr) as usize;
+    &ppu.vram[start..start + NAMETABLE_SIZE]
+}
+
+// Draws the part of `nametable` inside `view`, translated by (shift_x, shift_y)
+// onto the frame. Each tile's palette comes from this nametable's own attribute
+// table. Pixel value 0 always shows the universal background colour at $3F00.
+fn render_nametable(
+    ppu: &PPU,
+    frame: &mut Frame,
+    nametable: &[u8],
+    view: Viewport,
+    shift_x: isize,
+    shift_y: isize,
+) {
+    let view = Viewport {
+        x2: view.x2.min(NAMETABLE_WIDTH),
+        y2: view.y2.min(NAMETABLE_HEIGHT),
+        ..view
+    };
+    if view.is_empty() {
+        return;
+    }
+    let bank = ppu.control.get_background_pattern_addr() as usize;
+    let attribute_table = &nametable[ATTRIBUTE_TABLE_START..NAMETABLE_SIZE];
+
+    for tile_row in view.y1 / 8..view.y2.div_ceil(8) {
+        for tile_column in view.x1 / 8..view.x2.div_ceil(8) {
+            let tile_n = nametable[tile_row * TILES_PER_ROW + tile_column] as usize;
+            let Some(tile) = ppu.chr_tile(bank, tile_n) else {
+                continue;
+            };
+            let palette = bg_palette(ppu, attribute_table, tile_column, tile_row);
+
+            for y in 0..8 {
+                let pixel_y = tile_row * 8 + y;
+                if pixel_y < view.y1 || pixel_y >= view.y2 {
+                    continue;
+                }
+                for x in 0..8 {
+                    let pixel_x = tile_column * 8 + x;
+                    if pixel_x < view.x1 || pixel_x >= view.x2 {
+                        continue;
+                    }
+                    let value = tile_pixel(tile, x, y);
+                    let color = system_color(palette[value as usize]);
+                    let screen_x = pixel_x as isize + shift_x;
+                    let screen_y = pixel_y as isize + shift_y;
+                    if screen_x >= 0 && screen_y >= 0 {
+                        frame.set_pixel(screen_x as usize, screen_y as usize, color);
+                    }
+                }
             }
         }
     }
+}
+
+// Draws screen rows `rows` of the background as seen through the scroll
+// window `scroll`. The window starts (x, y) pixels into the base nametable and
+// spills over into the nametables to the right, below and diagonally; which
+// physical table each of those is depends on the cartridge's mirroring.
+// https://www.nesdev.org/wiki/PPU_scrolling
+fn render_scroll_window(ppu: &PPU, frame: &mut Frame, scroll: ScrollState, rows: Range<usize>) {
+    let scroll_x = scroll.x as usize;
+    let scroll_y = scroll.y as usize;
+    let base = scroll.nametable_addr;
+    let (width, height) = (NAMETABLE_WIDTH, NAMETABLE_HEIGHT);
+    let (shift_left, shift_up) = (-(scroll_x as isize), -(scroll_y as isize));
+    let (shift_right, shift_down) = (width as isize + shift_left, height as isize + shift_up);
+
+    let regions = [
+        // (nametable, the part of it that is visible, where its origin lands on screen)
+        (
+            base,
+            Viewport {
+                x1: scroll_x,
+                y1: scroll_y,
+                x2: width,
+                y2: height,
+            },
+            shift_left,
+            shift_up,
+        ),
+        (
+            base ^ NAMETABLE_RIGHT,
+            Viewport {
+                x1: 0,
+                y1: scroll_y,
+                x2: scroll_x,
+                y2: height,
+            },
+            shift_right,
+            shift_up,
+        ),
+        (
+            base ^ NAMETABLE_BELOW,
+            Viewport {
+                x1: scroll_x,
+                y1: 0,
+                x2: width,
+                y2: scroll_y,
+            },
+            shift_left,
+            shift_down,
+        ),
+        (
+            base ^ NAMETABLE_RIGHT ^ NAMETABLE_BELOW,
+            Viewport {
+                x1: 0,
+                y1: 0,
+                x2: scroll_x,
+                y2: scroll_y,
+            },
+            shift_right,
+            shift_down,
+        ),
+    ];
+
+    for (addr, view, shift_x, shift_y) in regions {
+        let view = view.clip_to_screen_rows(&rows, shift_y);
+        render_nametable(ppu, frame, nametable_at(ppu, addr), view, shift_x, shift_y);
+    }
+}
+
+// Draws the background in horizontal bands: the frame-start scroll from row 0,
+// then each mid-frame scroll split from its scanline down. That is how games
+// keep a status bar still while the playfield underneath scrolls.
+fn render_background(ppu: &PPU, frame: &mut Frame) {
+    let mut scroll = ppu.frame_scroll;
+    let mut row = 0;
+    for split in &ppu.scroll_splits {
+        let split_row = (split.scanline as usize).min(NAMETABLE_HEIGHT);
+        render_scroll_window(ppu, frame, scroll, row..split_row);
+        scroll = split.state;
+        row = split_row;
+    }
+    render_scroll_window(ppu, frame, scroll, row..NAMETABLE_HEIGHT);
 }
 
 // Draws every OAM entry (8x8 sprites only). Iterating in reverse makes
@@ -107,7 +241,7 @@ fn render_sprites(ppu: &PPU, frame: &mut Frame) {
         let flip_horizontal = attributes & SPRITE_FLIP_HORIZONTAL != 0;
         let palette = sprite_palette(ppu, attributes & SPRITE_PALETTE_MASK);
 
-        let Some(tile) = tile(&ppu.chr_rom, bank, tile_idx) else {
+        let Some(tile) = ppu.chr_tile(bank, tile_idx) else {
             continue;
         };
 
@@ -134,6 +268,7 @@ pub fn render(ppu: &PPU, frame: &mut Frame) {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::ppu::{ScrollSplit, ScrollState, TILE_SIZE};
     use crate::rom::Mirror;
 
     #[test]
@@ -300,6 +435,165 @@ mod test {
         let mut frame = Frame::new();
         render(&ppu, &mut frame);
         assert_eq!(pixel(&frame, 0, 0), palette::SYSTEM_PALLETE[0x2A]);
+    }
+
+    // Scrolling. Physical VRAM holds two nametables: A at 0..0x400, B at
+    // 0x400..0x800; `Mirror` decides which logical $2000/$2400/$2800/$2C00
+    // table maps where.
+    fn scroll_ppu(mirror: Mirror) -> PPU {
+        let mut ppu = PPU::new(chr_with_solid_tile_1(), mirror);
+        ppu.palette_table[0] = 0x0F; // universal background
+        ppu.palette_table[1] = 0x21; // palette 0, colour 1
+        ppu
+    }
+
+    #[test]
+    fn horizontal_scroll_shifts_the_base_nametable_left() {
+        let mut ppu = scroll_ppu(Mirror::Vertical);
+        ppu.vram[1] = 1; // nametable A, column 1
+        ppu.frame_scroll.x = 8;
+
+        let mut frame = Frame::new();
+        render(&ppu, &mut frame);
+        assert_eq!(pixel(&frame, 0, 0), palette::SYSTEM_PALLETE[0x21]);
+        assert_eq!(pixel(&frame, 8, 0), palette::SYSTEM_PALLETE[0x0F]);
+    }
+
+    #[test]
+    fn horizontal_scroll_fills_the_right_edge_from_the_next_nametable() {
+        let mut ppu = scroll_ppu(Mirror::Vertical);
+        ppu.vram[0x400] = 1; // nametable B ($2400 under vertical mirroring), column 0
+        ppu.frame_scroll.x = 8;
+
+        let mut frame = Frame::new();
+        render(&ppu, &mut frame);
+        assert_eq!(pixel(&frame, 247, 0), palette::SYSTEM_PALLETE[0x0F]);
+        assert_eq!(pixel(&frame, 248, 0), palette::SYSTEM_PALLETE[0x21]);
+        assert_eq!(pixel(&frame, 255, 0), palette::SYSTEM_PALLETE[0x21]);
+    }
+
+    #[test]
+    fn vertical_scroll_fills_the_bottom_edge_from_the_nametable_below() {
+        let mut ppu = scroll_ppu(Mirror::Horizontal);
+        ppu.vram[0x400] = 1; // nametable B ($2800 under horizontal mirroring), row 0
+        ppu.frame_scroll.y = 8;
+
+        let mut frame = Frame::new();
+        render(&ppu, &mut frame);
+        assert_eq!(pixel(&frame, 0, 231), palette::SYSTEM_PALLETE[0x0F]);
+        assert_eq!(pixel(&frame, 0, 232), palette::SYSTEM_PALLETE[0x21]);
+        assert_eq!(pixel(&frame, 0, 239), palette::SYSTEM_PALLETE[0x21]);
+    }
+
+    #[test]
+    fn scrolled_in_tiles_use_their_own_nametables_attribute_table() {
+        let mut ppu = scroll_ppu(Mirror::Vertical);
+        ppu.vram[0x400] = 1;
+        ppu.vram[0x400 + 0x3C0] = 0b10; // nametable B: top-left quadrant -> palette 2
+        ppu.vram[0x3C0] = 0b00; // nametable A says palette 0 (the wrong answer)
+        ppu.palette_table[9] = 0x2A; // palette 2, colour 1
+        ppu.frame_scroll.x = 8;
+
+        let mut frame = Frame::new();
+        render(&ppu, &mut frame);
+        assert_eq!(pixel(&frame, 248, 0), palette::SYSTEM_PALLETE[0x2A]);
+    }
+
+    #[test]
+    fn control_register_selects_the_base_nametable() {
+        let mut ppu = scroll_ppu(Mirror::Vertical);
+        ppu.vram[0x400] = 1; // nametable B, column 0
+        ppu.frame_scroll.nametable_addr = 0x2400;
+
+        let mut frame = Frame::new();
+        render(&ppu, &mut frame);
+        assert_eq!(pixel(&frame, 0, 0), palette::SYSTEM_PALLETE[0x21]);
+    }
+
+    #[test]
+    fn horizontal_scroll_under_horizontal_mirroring_wraps_onto_the_same_nametable() {
+        // $2400 mirrors $2000, so the right edge must come from nametable A,
+        // not from nametable B (which holds $2800).
+        let mut ppu = scroll_ppu(Mirror::Horizontal);
+        ppu.vram[0] = 1; // nametable A, column 0
+        for row in 0..8 {
+            ppu.chr_rom[2 * TILE_SIZE + 8 + row] = 0xFF; // tile 2: solid colour 2
+        }
+        ppu.palette_table[2] = 0x16;
+        ppu.vram[0x400] = 2; // nametable B, column 0: the wrong answer
+        ppu.frame_scroll.x = 8;
+
+        let mut frame = Frame::new();
+        render(&ppu, &mut frame);
+        assert_eq!(pixel(&frame, 248, 0), palette::SYSTEM_PALLETE[0x21]);
+    }
+
+    #[test]
+    fn scrolling_on_both_axes_fills_the_corner_from_the_diagonal_nametable() {
+        // Under four-screen mirroring all four tables are distinct; $2C00 is
+        // physical 0xC00. Only its top-left tile is set, so pixel (248, 232)
+        // can only come from that table.
+        let mut ppu = scroll_ppu(Mirror::FourScreen);
+        ppu.vram[0xC00] = 1;
+        ppu.frame_scroll.x = 8;
+        ppu.frame_scroll.y = 8;
+
+        let mut frame = Frame::new();
+        render(&ppu, &mut frame);
+        assert_eq!(pixel(&frame, 248, 232), palette::SYSTEM_PALLETE[0x21]);
+        assert_eq!(pixel(&frame, 247, 232), palette::SYSTEM_PALLETE[0x0F]);
+        assert_eq!(pixel(&frame, 248, 231), palette::SYSTEM_PALLETE[0x0F]);
+    }
+
+    #[test]
+    fn scroll_y_beyond_the_nametable_height_does_not_panic() {
+        let mut ppu = scroll_ppu(Mirror::Vertical);
+        ppu.frame_scroll.x = 255;
+        ppu.frame_scroll.y = 250; // hardware treats 240..=255 as "negative" scroll
+        let mut frame = Frame::new();
+        render(&ppu, &mut frame);
+    }
+
+    #[test]
+    fn rows_above_a_scroll_split_keep_the_frame_start_scroll() {
+        // Status-bar style split: rows 0..26 unscrolled, rows 26.. scrolled by 8.
+        let mut ppu = scroll_ppu(Mirror::Vertical);
+        ppu.vram[3 * TILES_PER_ROW + 1] = 1; // nametable A, tile row 3 (y 24..32), column 1
+        ppu.scroll_splits.push(ScrollSplit {
+            scanline: 26,
+            state: ScrollState {
+                x: 8,
+                y: 0,
+                nametable_addr: 0x2000,
+            },
+        });
+
+        let mut frame = Frame::new();
+        render(&ppu, &mut frame);
+        assert_eq!(pixel(&frame, 0, 25), palette::SYSTEM_PALLETE[0x0F]);
+        assert_eq!(pixel(&frame, 8, 25), palette::SYSTEM_PALLETE[0x21]);
+        assert_eq!(pixel(&frame, 0, 26), palette::SYSTEM_PALLETE[0x21]);
+        assert_eq!(pixel(&frame, 8, 26), palette::SYSTEM_PALLETE[0x0F]);
+    }
+
+    #[test]
+    fn a_scroll_split_can_switch_the_base_nametable() {
+        let mut ppu = scroll_ppu(Mirror::Vertical);
+        ppu.vram[0x400 + 4 * TILES_PER_ROW] = 1; // nametable B ($2400), tile row 4
+        ppu.vram[4 * TILES_PER_ROW] = 0; // nametable A, same spot: background
+        ppu.scroll_splits.push(ScrollSplit {
+            scanline: 32,
+            state: ScrollState {
+                x: 0,
+                y: 0,
+                nametable_addr: 0x2400,
+            },
+        });
+
+        let mut frame = Frame::new();
+        render(&ppu, &mut frame);
+        assert_eq!(pixel(&frame, 0, 32), palette::SYSTEM_PALLETE[0x21]);
+        assert_eq!(pixel(&frame, 0, 31), palette::SYSTEM_PALLETE[0x0F]);
     }
 
     // Drives the real ROM for a few frames so OAM DMA and sprite rendering see
