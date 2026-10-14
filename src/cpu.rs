@@ -2052,6 +2052,23 @@ mod test {
     }
 
     #[test]
+    fn apu_frame_irq_vectors_through_fffe() {
+        // Main @ 0x8000: LDA #$00, STA $4017 (4-step, IRQ enabled), CLI,
+        // JMP $8006 (spin). The APU's frame counter raises IRQ after ~29830
+        // cycles. Handler @ 0x9000: LDA #$EE, STA $10, BRK (records and halts).
+        let mut prg = vec![0u8; 2 * PRG_ROM_PAGE_SIZE];
+        prg[0x0000..0x0009]
+            .copy_from_slice(&[0xA9, 0x00, 0x8D, 0x17, 0x40, 0x58, 0x4C, 0x06, 0x80]);
+        prg[0x1000..0x1005].copy_from_slice(&[0xA9, 0xEE, 0x85, 0x10, 0x00]);
+
+        let rom = rom_with_vectors(prg, 0, 0x9000);
+        let mut cpu = CPU::new(Bus::new(rom, |_, _| {}));
+        cpu.run();
+
+        assert_eq!(cpu.mem_read(0x10), 0xEE);
+    }
+
+    #[test]
     fn nmi_at_vblank_vectors_through_fffa() {
         // Full path: the CPU spins in a JMP-to-self loop while the bus ticks the
         // PPU forward; at scanline 241 the PPU raises an NMI, which the run loop
