@@ -110,7 +110,7 @@ pub mod test {
             ],
             trainer: None,
             pgp_rom: pgp_rom_contents,
-            chr_rom: vec![2; 1 * CHR_ROM_PAGE_SIZE],
+            chr_rom: vec![2; CHR_ROM_PAGE_SIZE],
         };
 
         let rom_data = create_rom(file);
@@ -128,7 +128,7 @@ pub mod test {
             ],
             trainer: None,
             pgp_rom: vec![1; 2 * PRG_ROM_PAGE_SIZE],
-            chr_rom: vec![2; 1 * CHR_ROM_PAGE_SIZE],
+            chr_rom: vec![2; CHR_ROM_PAGE_SIZE],
         };
         let rom_data = create_rom(file);
 
@@ -224,8 +224,8 @@ pub mod test {
                 0x00, 0x00,
             ],
             trainer: None,
-            pgp_rom: vec![1; 1 * PRG_ROM_PAGE_SIZE],
-            chr_rom: vec![2; 1 * CHR_ROM_PAGE_SIZE],
+            pgp_rom: vec![1; PRG_ROM_PAGE_SIZE],
+            chr_rom: vec![2; CHR_ROM_PAGE_SIZE],
         };
         let rom_data = create_rom(file);
 

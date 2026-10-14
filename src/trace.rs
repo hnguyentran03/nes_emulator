@@ -138,7 +138,7 @@ mod test {
 
     #[test]
     fn test_format_trace() {
-        let mut bus = Bus::new(build_test_rom(vec![]));
+        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
         bus.mem_write(100, 0xa2);
         bus.mem_write(101, 0x01);
         bus.mem_write(102, 0xca);
@@ -170,14 +170,14 @@ mod test {
 
     #[test]
     fn test_format_mem_access() {
-        let mut bus = Bus::new(build_test_rom(vec![]));
+        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
         // ORA ($33), Y
         bus.mem_write(100, 0x11);
         bus.mem_write(101, 0x33);
 
         //data
         bus.mem_write(0x33, 00);
-        bus.mem_write(0x34, 04);
+        bus.mem_write(0x34, 4);
 
         //target cell
         bus.mem_write(0x400, 0xAA);

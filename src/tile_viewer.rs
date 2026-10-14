@@ -14,7 +14,7 @@ const TILES_PER_BANK: usize = BANK_SIZE / TILE_SIZE; // 256
 
 pub fn run() {
     let rom_path = std::env::args()
-        .nth(1)
+        .nth(2)
         .unwrap_or_else(|| DEFAULT_ROM.to_string());
 
     let sdl_context = sdl2::init().unwrap();
@@ -114,7 +114,7 @@ fn draw_tile(
                 3 => palette::SYSTEM_PALLETE[0x30],
                 _ => unreachable!(),
             };
-            frame.set_pixel(origin_x + col, origin_y + row, r, g, b);
+            frame.set_pixel(origin_x + col, origin_y + row, (r, g, b));
         }
     }
 }

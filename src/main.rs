@@ -10,6 +10,8 @@ pub mod trace;
 use bus::Bus;
 use cpu::CPU;
 use cpu::Mem;
+use ppu::PPU;
+use render::frame::Frame;
 use rom::Rom;
 
 #[macro_use]
@@ -105,7 +107,7 @@ fn run_snake(rom_path: String) {
     let rom_data = std::fs::read(&rom_path).unwrap();
 
     let rom = Rom::new(&rom_data).unwrap();
-    let bus = Bus::new(rom);
+    let bus = Bus::new(rom, |_| {});
     let mut cpu = CPU::new(bus);
     cpu.reset();
 
@@ -128,6 +130,66 @@ fn run_snake(rom_path: String) {
     });
 }
 
+const GAME_SCALE: f32 = 3.0;
+const DEFAULT_GAME_ROM: &str = "roms/Alter_Ego.nes";
+
+// Runs a ROM through the full CPU/PPU pipeline. The bus invokes the gameloop
+// callback once per frame (on the vblank NMI), which is where the PPU state is
+// rendered into a frame buffer and pushed to the SDL window.
+fn run_game(rom_path: String) {
+    let sdl_context = sdl2::init().unwrap();
+    let video_subsystem = sdl_context.video().unwrap();
+    let window = video_subsystem
+        .window(
+            "NES Emulator",
+            (Frame::WIDTH as f32 * GAME_SCALE) as u32,
+            (Frame::HEIGHT as f32 * GAME_SCALE) as u32,
+        )
+        .position_centered()
+        .build()
+        .unwrap();
+    let mut canvas = window.into_canvas().present_vsync().build().unwrap();
+    let mut event_pump = sdl_context.event_pump().unwrap();
+    canvas.set_scale(GAME_SCALE, GAME_SCALE).unwrap();
+
+    let creator = canvas.texture_creator();
+    let mut texture = creator
+        .create_texture_static(
+            PixelFormatEnum::RGB24,
+            Frame::WIDTH as u32,
+            Frame::HEIGHT as u32,
+        )
+        .unwrap();
+
+    let rom_data =
+        std::fs::read(&rom_path).unwrap_or_else(|e| panic!("failed to read {rom_path}: {e}"));
+    let rom = Rom::new(&rom_data).unwrap();
+
+    let mut frame = Frame::new();
+
+    let bus = Bus::new(rom, move |ppu: &PPU| {
+        render::render(ppu, &mut frame);
+        texture.update(None, &frame.data, Frame::WIDTH * 3).unwrap();
+        canvas.copy(&texture, None, None).unwrap();
+        canvas.present();
+
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => std::process::exit(0),
+                _ => {}
+            }
+        }
+    });
+
+    let mut cpu = CPU::new(bus);
+    cpu.reset();
+    cpu.run();
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
@@ -138,6 +200,8 @@ fn main() {
                 .unwrap_or_else(|| "roms/snake.nes".to_string());
             run_snake(rom);
         }
-        _ => tile_viewer::run(),
+        Some("tiles") => tile_viewer::run(),
+        Some(rom) => run_game(rom.to_string()),
+        None => run_game(DEFAULT_GAME_ROM.to_string()),
     }
 }

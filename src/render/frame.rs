@@ -18,12 +18,12 @@ impl Frame {
         }
     }
 
-    pub fn set_pixel(&mut self, x: usize, y: usize, r: u8, g: u8, b: u8) {
-        let index = (y * Frame::WIDTH + x) * 3;
-
-        if index + 2 >= self.data.len() {
-            return; // Out of bounds, do nothing
+    pub fn set_pixel(&mut self, x: usize, y: usize, rgb: (u8, u8, u8)) {
+        if x >= Frame::WIDTH || y >= Frame::HEIGHT {
+            return; // Off-screen; without the x check a pixel would wrap onto the next row.
         }
+        let (r, g, b) = rgb;
+        let index = (y * Frame::WIDTH + x) * 3;
 
         self.data[index] = r;
         self.data[index + 1] = g;

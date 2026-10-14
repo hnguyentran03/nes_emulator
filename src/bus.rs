@@ -24,7 +24,7 @@ const PPU_MEM_END: u16 = PPU_REGISTERS_END;
 const PPU_MIRROR_MASK: u16 = 0b0010_0000_0000_0111;
 const PPU_CYCLE_PER_CPU_CYCLE: usize = 3;
 
-impl Mem for Bus {
+impl Mem for Bus<'_> {
     fn mem_read(&mut self, addr: u16) -> u8 {
         match addr {
             RAM..=RAM_END => {
@@ -68,7 +68,19 @@ impl Mem for Bus {
 
             OAM_ADDR => self.ppu.write_to_oam_addr(data),
 
-            OAM_DMA => self.ppu.write_to_oam_data(data),
+            OAM_DATA => self.ppu.write_to_oam_data(data),
+
+            // Writing page number N to $4014 copies CPU memory $NN00-$NNFF into OAM.
+            // https://www.nesdev.org/wiki/PPU_registers#OAMDMA_-_Sprite_DMA_($4014_write)
+            // TODO: the DMA stalls the CPU for 513/514 cycles; not modelled yet.
+            OAM_DMA => {
+                let hi = (data as u16) << 8;
+                let mut buffer = [0u8; 0x100];
+                for (i, slot) in buffer.iter_mut().enumerate() {
+                    *slot = self.mem_read(hi + i as u16);
+                }
+                self.ppu.write_oam_dma(&buffer);
+            }
 
             SCROLL_REGISTER => self.ppu.write_to_scroll(data),
 
@@ -88,16 +100,20 @@ impl Mem for Bus {
     }
 }
 
-pub struct Bus {
+pub struct Bus<'call> {
     cpu_vram: [u8; 0x800],
     prg_rom: Vec<u8>,
     ppu: PPU,
     cycles: usize,
     irq_line: bool,
+    gameloop_callback: Box<dyn FnMut(&PPU) + 'call>,
 }
 
-impl Bus {
-    pub fn new(rom: Rom) -> Self {
+impl<'call> Bus<'call> {
+    pub fn new<F>(rom: Rom, gameloop_callback: F) -> Self
+    where
+        F: FnMut(&PPU) + 'call,
+    {
         let ppu = PPU::new(rom.chr_rom, rom.screen_mirror);
 
         Bus {
@@ -106,16 +122,24 @@ impl Bus {
             ppu,
             cycles: 0,
             irq_line: false,
+            gameloop_callback: Box::from(gameloop_callback),
         }
     }
 
     pub fn tick(&mut self, cycles: usize) {
         self.cycles += cycles;
+
+        let nmi_before = self.ppu.nmi_interrupted.is_some();
         self.ppu.tick(cycles * PPU_CYCLE_PER_CPU_CYCLE);
+        let nmi_after = self.ppu.nmi_interrupted.is_some();
+
+        if !nmi_before && nmi_after {
+            (self.gameloop_callback)(&self.ppu);
+        }
     }
 
-    pub fn poll_nmi_interupted(&mut self) -> Option<u8> {
-        self.ppu.poll_nmi_interupted()
+    pub fn poll_nmi_interrupted(&mut self) -> Option<u8> {
+        self.ppu.poll_nmi_interrupted()
     }
 
     pub fn poll_irq(&mut self) -> bool {
@@ -162,15 +186,45 @@ mod test {
     }
 
     #[test]
+    fn gameloop_callback_fires_once_per_vblank_nmi() {
+        use std::cell::Cell;
+        use std::rc::Rc;
+
+        let frames = Rc::new(Cell::new(0));
+        let counter = Rc::clone(&frames);
+        let mut bus = Bus::new(build_test_rom(vec![]), move |_ppu: &PPU| {
+            counter.set(counter.get() + 1);
+        });
+
+        // Tick a couple of CPU cycles at a time (like the run loop does) for
+        // one full frame: 341 PPU cycles x 262 scanlines = 89342 PPU cycles.
+        let run_frame = |bus: &mut Bus| {
+            for _ in 0..(341 * 262 / PPU_CYCLE_PER_CPU_CYCLE / 2 + 1) {
+                bus.tick(2);
+                bus.poll_nmi_interrupted();
+            }
+        };
+
+        // Without NMI enabled a whole frame produces no callback.
+        run_frame(&mut bus);
+        assert_eq!(frames.get(), 0);
+
+        bus.mem_write(CONTROL_REGISTER, ControlRegister::GENERATE_NMI.bits());
+        run_frame(&mut bus);
+        run_frame(&mut bus);
+        assert_eq!(frames.get(), 2);
+    }
+
+    #[test]
     fn test_mem_read_write_to_ram() {
-        let mut bus = Bus::new(build_test_rom(vec![]));
+        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
         bus.mem_write(0x01, 0x55);
         assert_eq!(bus.mem_read(0x01), 0x55);
     }
 
     #[test]
     fn ram_mirrors_at_2k_boundary() {
-        let mut bus = Bus::new(build_test_rom(vec![]));
+        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
         bus.mem_write(0x0001, 0xAA);
         bus.mem_write(0x0801, 0xBB);
         assert_eq!(bus.mem_read(0x0001), 0xBB);
@@ -180,14 +234,14 @@ mod test {
 
     #[test]
     fn prg_rom_read_two_banks() {
-        let mut bus = Bus::new(build_test_rom(vec![0xEA, 0x4C, 0x00, 0x80]));
+        let mut bus = Bus::new(build_test_rom(vec![0xEA, 0x4C, 0x00, 0x80]), |_| {});
         assert_eq!(bus.mem_read(PRG_ROM), 0xEA);
         assert_eq!(bus.mem_read(PRG_ROM + 0x4000), bus.prg_rom[0x4000]);
     }
 
     #[test]
     fn prg_rom_single_bank_mirrors_into_c000() {
-        let mut bus = Bus::new(single_bank_test_rom(0xAB));
+        let mut bus = Bus::new(single_bank_test_rom(0xAB), |_| {});
         assert_eq!(bus.mem_read(PRG_ROM), 0xAB);
         assert_eq!(bus.mem_read(0xC000), 0xAB);
         assert_eq!(bus.mem_read(PRG_ROM + 0x0123), 0x77);
@@ -196,13 +250,13 @@ mod test {
 
     #[test]
     fn unmapped_read_returns_open_bus_zero() {
-        let mut bus = Bus::new(build_test_rom(vec![]));
+        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
         assert_eq!(bus.mem_read(0x5000), 0);
     }
 
     #[test]
     fn ppu_mirrored_register_write_aliases_base_port() {
-        let mut bus = Bus::new(build_test_rom(vec![]));
+        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
         bus.mem_write(0x2008, 0x80);
         bus.mem_write(0x2018, 0x80);
         assert_eq!(bus.ppu.control.bits(), 0x80);
@@ -210,7 +264,7 @@ mod test {
 
     #[test]
     fn ppu_status_read_via_cpu_and_clears_vblank() {
-        let mut bus = Bus::new(build_test_rom(vec![]));
+        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
         bus.ppu.status.set_vblank_status(true);
         let raw = bus.mem_read(STATUS_REGISTER);
         assert_ne!(raw & StatusRegister::VBLANK_STARTED.bits(), 0);
@@ -218,19 +272,36 @@ mod test {
     }
 
     #[test]
-    fn ppu_oam_4014_write_path() {
-        let mut bus = Bus::new(build_test_rom(vec![]));
+    fn ppu_oam_data_write_through_2004_auto_increments() {
+        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
         bus.mem_write(OAM_ADDR, 0x02);
-        bus.mem_write(OAM_DMA, 0x11);
-        bus.mem_write(OAM_DMA, 0x22);
+        bus.mem_write(OAM_DATA, 0x11);
+        bus.mem_write(OAM_DATA, 0x22);
         assert_eq!(bus.ppu.oam_addr, 0x04);
         bus.mem_write(OAM_ADDR, 0x02);
         assert_eq!(bus.mem_read(OAM_DATA), 0x11);
+        bus.mem_write(OAM_ADDR, 0x03);
+        assert_eq!(bus.mem_read(OAM_DATA), 0x22);
+    }
+
+    #[test]
+    fn ppu_oam_dma_4014_copies_a_cpu_ram_page_into_oam() {
+        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
+        for i in 0..0x100u16 {
+            bus.mem_write(0x0200 + i, i as u8);
+        }
+        bus.mem_write(OAM_ADDR, 0x00);
+        bus.mem_write(OAM_DMA, 0x02);
+        assert_eq!(bus.ppu.oam_data[0x00], 0x00);
+        assert_eq!(bus.ppu.oam_data[0x7F], 0x7F);
+        assert_eq!(bus.ppu.oam_data[0xFF], 0xFF);
+        // 256 writes wrap the OAM address back to where it started.
+        assert_eq!(bus.ppu.oam_addr, 0x00);
     }
 
     #[test]
     fn ppu_addr_and_data_reach_vram_through_bus() {
-        let mut bus = Bus::new(build_test_rom(vec![]));
+        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
         bus.mem_write(CONTROL_REGISTER, ControlRegister::VRAM_ADD_INCREMENT.bits());
         bus.mem_write(PPU_ADDR, 0x20);
         bus.mem_write(PPU_ADDR, 0x00);
@@ -241,21 +312,21 @@ mod test {
     #[test]
     #[should_panic(expected = "Attempt to read from write-only PPU address 2000")]
     fn panic_on_read_write_only_ppu_control() {
-        let mut bus = Bus::new(build_test_rom(vec![]));
+        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
         let _ = bus.mem_read(CONTROL_REGISTER);
     }
 
     #[test]
     #[should_panic(expected = "attempt to write to PPU status register")]
     fn panic_on_write_ppu_status() {
-        let mut bus = Bus::new(build_test_rom(vec![]));
+        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
         bus.mem_write(STATUS_REGISTER, 0);
     }
 
     #[test]
     #[should_panic(expected = "Attempting to write to PRG ROM")]
     fn panic_on_write_prg_rom() {
-        let mut bus = Bus::new(build_test_rom(vec![]));
+        let mut bus = Bus::new(build_test_rom(vec![]), |_| {});
         bus.mem_write(PRG_ROM, 0xFF);
     }
 }

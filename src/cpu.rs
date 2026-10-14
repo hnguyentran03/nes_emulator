@@ -43,14 +43,14 @@ const IRQ: Interrupt = Interrupt {
     cycles: 7,
 };
 
-pub struct CPU {
+pub struct CPU<'a> {
     pub register_a: u8,
     pub register_x: u8,
     pub register_y: u8,
     pub flags: CPUFlags,
     pub program_counter: u16,
     pub stack_ptr: u8,
-    pub bus: Bus,
+    pub bus: Bus<'a>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -94,7 +94,7 @@ pub trait Mem {
     }
 }
 
-impl Mem for CPU {
+impl Mem for CPU<'_> {
     fn mem_read(&mut self, addr: u16) -> u8 {
         self.bus.mem_read(addr)
     }
@@ -129,7 +129,7 @@ pub trait Stack {
     }
 }
 
-impl Stack for CPU {
+impl Stack for CPU<'_> {
     fn stack_push(&mut self, data: u8) {
         self.mem_write(STACK + self.stack_ptr as u16, data);
         self.stack_ptr = self.stack_ptr.wrapping_sub(1);
@@ -141,8 +141,8 @@ impl Stack for CPU {
     }
 }
 
-impl CPU {
-    pub fn new(bus: Bus) -> Self {
+impl<'a> CPU<'a> {
+    pub fn new(bus: Bus<'a>) -> Self {
         CPU {
             register_a: 0,
             register_x: 0,
@@ -879,12 +879,12 @@ impl CPU {
     }
 
     // Fetches the next instruction, decodes it and executies it.
-    pub fn run_with_callback<F: FnMut(&mut CPU)>(&mut self, mut callback: F) {
+    pub fn run_with_callback<F: FnMut(&mut CPU<'a>)>(&mut self, mut callback: F) {
         let opcodes: &HashMap<u8, opcodes::OpCode> = &opcodes::OP_CODES;
 
         loop {
             // NMI takes priority over IRQ
-            if self.bus.poll_nmi_interupted().is_some() {
+            if self.bus.poll_nmi_interrupted().is_some() {
                 self.interrupt(&NMI);
             } else if self.bus.poll_irq() && !self.flags.contains(CPUFlags::INTERRUPT) {
                 self.interrupt(&IRQ);
@@ -1097,7 +1097,7 @@ mod test {
         // LDA #$10, ADC #$20, BRK
         let program = vec![0xA9, 0x10, 0x69, 0x20, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1112,7 +1112,7 @@ mod test {
         // LDA #$F0, AND #$0F, BRK
         let program = vec![0xA9, 0xF0, 0x29, 0x0F, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1127,7 +1127,7 @@ mod test {
         // LDA #$41, ASL A, BRK
         let program = vec![0xA9, 0x41, 0x0A, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1142,7 +1142,7 @@ mod test {
         // CLC, BCC +3, NOP NOP NOP, BRK
         let program = vec![0x18, 0x90, 0x03, 0xEA, 0xEA, 0xEA, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1156,7 +1156,7 @@ mod test {
         // SEC, BCS +3, NOP NOP NOP, BRK
         let program = vec![0x38, 0xB0, 0x03, 0xEA, 0xEA, 0xEA, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1170,7 +1170,7 @@ mod test {
         // LDA #$00, BEQ +3, NOP NOP NOP, BRK
         let program = vec![0xA9, 0x00, 0xF0, 0x03, 0xEA, 0xEA, 0xEA, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1184,7 +1184,7 @@ mod test {
         // LDA #$FF, BIT $F0, BRK
         let program = vec![0xA9, 0xFF, 0x24, 0xF0, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         cpu.mem_write(0xF0, 0xC0);
@@ -1201,7 +1201,7 @@ mod test {
         // LDA #$80, BMI +3, NOP NOP NOP, BRK
         let program = vec![0xA9, 0x80, 0x30, 0x03, 0xEA, 0xEA, 0xEA, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1215,7 +1215,7 @@ mod test {
         // LDA #$01, BNE +3, NOP NOP NOP, BRK
         let program = vec![0xA9, 0x01, 0xD0, 0x03, 0xEA, 0xEA, 0xEA, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1229,7 +1229,7 @@ mod test {
         // LDA #$01, BPL +3, NOP NOP NOP, BRK
         let program = vec![0xA9, 0x01, 0x10, 0x03, 0xEA, 0xEA, 0xEA, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1243,7 +1243,7 @@ mod test {
         // NOP, BRK
         let program = vec![0xEA, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1257,7 +1257,7 @@ mod test {
         // BVC +3, NOP NOP NOP, BRK
         let program = vec![0x50, 0x03, 0xEA, 0xEA, 0xEA, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1271,7 +1271,7 @@ mod test {
         // LDA #$40, ADC #$40, BVS +3, NOP NOP NOP, BRK
         let program = vec![0xA9, 0x40, 0x69, 0x40, 0x70, 0x03, 0xEA, 0xEA, 0xEA, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1285,7 +1285,7 @@ mod test {
         // SEC, CLC, BRK
         let program = vec![0x38, 0x18, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1299,7 +1299,7 @@ mod test {
         // SED, CLD, BRK
         let program = vec![0xF8, 0xD8, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1313,7 +1313,7 @@ mod test {
         // SEI, CLI, BRK
         let program = vec![0x78, 0x58, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1327,7 +1327,7 @@ mod test {
         // LDA #$40, ADC #$40, CLV, BRK
         let program = vec![0xA9, 0x40, 0x69, 0x40, 0xB8, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1341,7 +1341,7 @@ mod test {
         // LDA #$05, CMP #$05, BRK
         let program = vec![0xA9, 0x05, 0xC9, 0x05, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1356,7 +1356,7 @@ mod test {
         // LDX #$0A, CPX #$05, BRK
         let program = vec![0xA2, 0x0A, 0xE0, 0x05, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1370,7 +1370,7 @@ mod test {
         // LDY #$0A, CPY #$05, BRK
         let program = vec![0xA0, 0x0A, 0xC0, 0x05, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1384,7 +1384,7 @@ mod test {
         // DEC $F0, BRK
         let program = vec![0xC6, 0xF0, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         cpu.mem_write(0xF0, 0x02);
@@ -1400,7 +1400,7 @@ mod test {
         // LDX #$02, DEX, BRK
         let program = vec![0xA2, 0x02, 0xCA, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1414,7 +1414,7 @@ mod test {
         // LDY #$02, DEY, BRK
         let program = vec![0xA0, 0x02, 0x88, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1428,7 +1428,7 @@ mod test {
         // LDA #$AA, EOR #$55, BRK
         let program = vec![0xA9, 0xAA, 0x49, 0x55, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1442,7 +1442,7 @@ mod test {
         // INC $F0, BRK
         let program = vec![0xE6, 0xF0, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         cpu.mem_write(0xF0, 0xFE);
@@ -1458,7 +1458,7 @@ mod test {
         // LDX #$3F, INX, BRK
         let program = vec![0xA2, 0x3F, 0xE8, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1472,7 +1472,7 @@ mod test {
         // LDY #$3F, INY, BRK
         let program = vec![0xA0, 0x3F, 0xC8, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1490,7 +1490,7 @@ mod test {
             0x4C, target_lo, target_hi, 0xEA, 0xEA, 0xEA, 0xEA, 0xEA, 0xA9, 0x42, 0x00,
         ];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1508,7 +1508,7 @@ mod test {
             0x6C, 0xF2, 0x00, 0xEA, 0xEA, 0xEA, 0xEA, 0xEA, 0xA9, 0x42, 0x00,
         ];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         cpu.mem_write(0xF2, target_lo);
@@ -1529,7 +1529,7 @@ mod test {
             0x20, sub_lo, sub_hi, 0xA9, 0x11, 0x00, 0xEA, 0xEA, 0xEA, 0x60,
         ];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1543,7 +1543,7 @@ mod test {
         // LDA #$05, BRK
         let program = vec![0xA9, 0x05, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1559,7 +1559,7 @@ mod test {
         // LDA #$00, BRK
         let program = vec![0xA9, 0x00, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1573,7 +1573,7 @@ mod test {
         // LDA $F0, BRK
         let program = vec![0xA5, 0xF0, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         cpu.mem_write(0xF0, 0x55);
@@ -1589,7 +1589,7 @@ mod test {
         // LDX #$77, BRK
         let program = vec![0xA2, 0x77, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1603,7 +1603,7 @@ mod test {
         // LDY #$88, BRK
         let program = vec![0xA0, 0x88, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1617,7 +1617,7 @@ mod test {
         // LDA #$03, LSR A, BRK
         let program = vec![0xA9, 0x03, 0x4A, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1632,7 +1632,7 @@ mod test {
         // NOP, BRK
         let program = vec![0xEA, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1646,7 +1646,7 @@ mod test {
         // LDA #$0F, ORA #$F0, BRK
         let program = vec![0xA9, 0x0F, 0x09, 0xF0, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1660,7 +1660,7 @@ mod test {
         // LDA #$37, PHA, LDA #$00, PLA, BRK
         let program = vec![0xA9, 0x37, 0x48, 0xA9, 0x00, 0x68, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1674,7 +1674,7 @@ mod test {
         // SEC, PHP, CLD, PLP, BRK
         let program = vec![0x38, 0x08, 0xD8, 0x28, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1689,7 +1689,7 @@ mod test {
         // SEC, LDA #$80, ROL A, BRK
         let program = vec![0x38, 0xA9, 0x80, 0x2A, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1704,7 +1704,7 @@ mod test {
         // SEC, LDA #$01, ROR A, BRK
         let program = vec![0x38, 0xA9, 0x01, 0x6A, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1719,7 +1719,7 @@ mod test {
         // RTI, NOP, BRK
         let program = vec![0x40, 0xEA, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
         // cpu.reset();
 
@@ -1743,7 +1743,7 @@ mod test {
             0x20, sub_lo, sub_hi, 0xA9, 0x99, 0x00, 0xA9, 0x55, 0x60, 0x00,
         ];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1757,7 +1757,7 @@ mod test {
         // SEC, LDA #$05, SBC #$03, BRK
         let program = vec![0x38, 0xA9, 0x05, 0xE9, 0x03, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1772,7 +1772,7 @@ mod test {
         // SEC, BRK
         let program = vec![0x38, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1786,7 +1786,7 @@ mod test {
         // SED, BRK
         let program = vec![0xF8, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1800,7 +1800,7 @@ mod test {
         // SEI, BRK
         let program = vec![0x78, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1814,7 +1814,7 @@ mod test {
         // LDA #$42, STA $F0, BRK
         let program = vec![0xA9, 0x42, 0x85, 0xF0, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1828,7 +1828,7 @@ mod test {
         // LDA #$55, STA $0200, BRK
         let program = vec![0xA9, 0x55, 0x8D, 0x00, 0x02, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1842,7 +1842,7 @@ mod test {
         // LDX #$33, STX $F0, BRK
         let program = vec![0xA2, 0x33, 0x86, 0xF0, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1856,7 +1856,7 @@ mod test {
         // LDY #$44, STY $F0, BRK
         let program = vec![0xA0, 0x44, 0x84, 0xF0, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1870,7 +1870,7 @@ mod test {
         // LDA #$AB, TAX, BRK
         let program = vec![0xA9, 0xAB, 0xAA, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1884,7 +1884,7 @@ mod test {
         // LDA #$BC, TAY, BRK
         let program = vec![0xA9, 0xBC, 0xA8, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1898,7 +1898,7 @@ mod test {
         // TSX, BRK
         let program = vec![0xBA, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1912,7 +1912,7 @@ mod test {
         // LDX #$CD, TXA, BRK
         let program = vec![0xA2, 0xCD, 0x8A, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1926,7 +1926,7 @@ mod test {
         // LDX #$FA, TXS, TSX, BRK
         let program = vec![0xA2, 0xFA, 0x9A, 0xBA, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1940,7 +1940,7 @@ mod test {
         // LDY #$DE, TYA, BRK
         let program = vec![0xA0, 0xDE, 0x98, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1954,7 +1954,7 @@ mod test {
         // LDA #$FF, TAX, INX, INX, BRK
         let program = vec![0xA9, 0xFF, 0xAA, 0xE8, 0xE8, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1968,7 +1968,7 @@ mod test {
         // LDA #$C0, TAX, INX, BRK
         let program = vec![0xA9, 0xC0, 0xAA, 0xE8, 0x00];
         let rom = build_test_rom(program);
-        let bus = Bus::new(rom);
+        let bus = Bus::new(rom, |_| {});
         let mut cpu = CPU::new(bus);
 
         // cpu.reset();
@@ -1997,14 +1997,14 @@ mod test {
             0x00, 0x00,
         ];
         data.extend_from_slice(&image);
-        data.extend(std::iter::repeat(0u8).take(CHR_ROM_PAGE_SIZE));
+        data.extend(std::iter::repeat_n(0u8, CHR_ROM_PAGE_SIZE));
         Rom::new(&data).unwrap()
     }
 
     #[test]
     fn interrupt_pushes_status_and_jumps_through_vector() {
         let rom = rom_with_vectors(vec![], 0, 0x9000);
-        let mut cpu = CPU::new(Bus::new(rom));
+        let mut cpu = CPU::new(Bus::new(rom, |_| {}));
 
         let sp_before = cpu.stack_ptr;
         cpu.interrupt(&IRQ);
@@ -2025,7 +2025,7 @@ mod test {
         prg[0x1000..0x1005].copy_from_slice(&[0xA9, 0xEE, 0x85, 0x10, 0x00]);
 
         let rom = rom_with_vectors(prg, 0, 0x9000);
-        let mut cpu = CPU::new(Bus::new(rom));
+        let mut cpu = CPU::new(Bus::new(rom, |_| {}));
         assert!(cpu.flags.contains(CPUFlags::INTERRUPT));
 
         cpu.bus.set_irq(true);
@@ -2042,7 +2042,7 @@ mod test {
         prg[0x1000..0x1005].copy_from_slice(&[0xA9, 0xEE, 0x85, 0x10, 0x00]);
 
         let rom = rom_with_vectors(prg, 0, 0x9000);
-        let mut cpu = CPU::new(Bus::new(rom));
+        let mut cpu = CPU::new(Bus::new(rom, |_| {}));
 
         cpu.bus.set_irq(true);
         cpu.run();
@@ -2063,7 +2063,7 @@ mod test {
         prg[0x1000..0x1005].copy_from_slice(&[0xA9, 0xEE, 0x85, 0x10, 0x00]);
 
         let rom = rom_with_vectors(prg, 0x9000, 0);
-        let mut cpu = CPU::new(Bus::new(rom));
+        let mut cpu = CPU::new(Bus::new(rom, |_| {}));
         cpu.run();
 
         assert_eq!(cpu.mem_read(0x10), 0xEE); // NMI handler ran
@@ -2079,7 +2079,7 @@ mod test {
         prg[0x1000..0x1005].copy_from_slice(&[0xA9, 0xEE, 0x85, 0x10, 0x00]);
 
         let rom = rom_with_vectors(prg, 0x9000, 0);
-        let mut cpu = CPU::new(Bus::new(rom));
+        let mut cpu = CPU::new(Bus::new(rom, |_| {}));
 
         // Advance to scanline 241 with NMI disabled: sets the vblank flag but
         // raises no NMI. tick() advances one scanline per call, and each CPU

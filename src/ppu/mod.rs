@@ -19,6 +19,7 @@ const UNUSED_END: u16 = 0x3EFF;
 
 const PALETTE_TABLE_START: u16 = 0x3F00;
 const PALETTE_TABLE_END: u16 = 0x3FFF;
+const PALETTE_TABLE_SIZE: u16 = 0x20;
 
 const MIRROR_MASK: u16 = 0b1011_1111_1111_1111; // Mirrors from 0x3000-0x3EFF to 0x2000-0x2EFF
 const SCREEN_STATE_SIZE: u16 = 0x400; // 1 KiB
@@ -44,7 +45,7 @@ pub struct PPU {
 
     cycles: usize,
     scanlines: u16,
-    nmi_interupted: Option<u8>,
+    pub nmi_interrupted: Option<u8>,
 }
 
 impl PPU {
@@ -66,7 +67,7 @@ impl PPU {
 
             cycles: 0,
             scanlines: 0,
-            nmi_interupted: None,
+            nmi_interrupted: None,
         }
     }
 
@@ -81,13 +82,13 @@ impl PPU {
                 self.status.set_sprite_zero_hit(false);
                 if self.control.generate_vblank_nmi() {
                     self.status.set_vblank_status(true);
-                    self.nmi_interupted = Some(1);
+                    self.nmi_interrupted = Some(1);
                 }
             }
 
             if self.scanlines >= SCANLINES_PER_FRAME {
                 self.scanlines = 0;
-                self.nmi_interupted = None;
+                self.nmi_interrupted = None;
                 self.status.set_sprite_zero_hit(false);
                 self.status.reset_vblank_status();
                 return true;
@@ -97,8 +98,8 @@ impl PPU {
         false
     }
 
-    pub fn poll_nmi_interupted(&mut self) -> Option<u8> {
-        self.nmi_interupted.take()
+    pub fn poll_nmi_interrupted(&mut self) -> Option<u8> {
+        self.nmi_interrupted.take()
     }
 
     pub fn read_status(&mut self) -> u8 {
@@ -139,12 +140,23 @@ impl PPU {
             }
 
             PALETTE_TABLE_START..=PALETTE_TABLE_END => {
-                self.palette_table[(addr - PALETTE_TABLE_START) as usize]
+                self.palette_table[Self::palette_index(addr)]
             }
 
             _ => {
                 panic!("Unexpected address to mirrored space: {}", addr);
             }
+        }
+    }
+
+    // $3F00-$3F1F is mirrored through $3FFF, and $3F10/$3F14/$3F18/$3F1C
+    // are mirrors of $3F00/$3F04/$3F08/$3F0C.
+    // https://www.nesdev.org/wiki/PPU_palettes#Memory_Map
+    fn palette_index(addr: u16) -> usize {
+        let idx = (addr - PALETTE_TABLE_START) % PALETTE_TABLE_SIZE;
+        match idx {
+            0x10 | 0x14 | 0x18 | 0x1C => (idx - 0x10) as usize,
+            _ => idx as usize,
         }
     }
 
@@ -156,7 +168,7 @@ impl PPU {
         let before_nmi_status = self.control.generate_vblank_nmi();
         self.control.update(data);
         if !before_nmi_status && self.control.generate_vblank_nmi() && self.status.is_in_vblank() {
-            self.nmi_interupted = Some(1)
+            self.nmi_interrupted = Some(1)
         }
     }
 
@@ -190,14 +202,8 @@ impl PPU {
 
             UNUSED_START..=UNUSED_END => { /* Ignore attempts to write to unused addrs */ }
 
-            // Addresses $3F10/$3F14/$3F18/$3F1C are mirrors of $3F00/$3F04/$3F08/$3F0C
-            0x3f10 | 0x3f14 | 0x3f18 | 0x3f1c => {
-                let add_mirror = addr - 0x10;
-                self.palette_table[(add_mirror - PALETTE_TABLE_START) as usize] = data;
-            }
-
             PALETTE_TABLE_START..=PALETTE_TABLE_END => {
-                self.palette_table[(addr - PALETTE_TABLE_START) as usize] = data;
+                self.palette_table[Self::palette_index(addr)] = data;
             }
 
             _ => panic!("Unexpected acces to mirrored space {}", addr),
@@ -264,12 +270,12 @@ mod tests {
         set_vram_addr(&mut ppu, 0x2000);
         ppu.write_to_control(0);
         ppu.write_to_data(0x01);
-        assert_eq!(ppu.addr.get(), 0x2020);
+        assert_eq!(ppu.addr.get(), 0x2001);
 
         set_vram_addr(&mut ppu, 0x2000);
         ppu.write_to_control(ControlRegister::VRAM_ADD_INCREMENT.bits());
         ppu.write_to_data(0x02);
-        assert_eq!(ppu.addr.get(), 0x2001);
+        assert_eq!(ppu.addr.get(), 0x2020);
     }
 
     #[test]
@@ -437,6 +443,23 @@ mod tests {
         set_vram_addr(&mut ppu, 0x3F10);
         ppu.write_to_data(0x2C);
         assert_eq!(ppu.palette_table[0], 0x2C);
+    }
+
+    #[test]
+    fn palette_mirrors_3f20_through_3fff_onto_3f00_3f1f() {
+        let mut ppu = PPU::new(vec![0u8; CHR_ROM_PAGE_SIZE], Mirror::Horizontal);
+        ppu.write_to_control(0);
+        set_vram_addr(&mut ppu, 0x3F21); // mirror of 0x3F01
+        ppu.write_to_data(0x1A);
+        assert_eq!(ppu.palette_table[1], 0x1A);
+        set_vram_addr(&mut ppu, 0x3FFF); // mirror of 0x3F1F
+        ppu.write_to_data(0x2B);
+        assert_eq!(ppu.palette_table[0x1F], 0x2B);
+        set_vram_addr(&mut ppu, 0x3F30); // mirror of 0x3F10 -> 0x3F00
+        ppu.write_to_data(0x3C);
+        assert_eq!(ppu.palette_table[0], 0x3C);
+        set_vram_addr(&mut ppu, 0x3FE1);
+        assert_eq!(ppu.read_data(), 0x1A);
     }
 
     #[test]

@@ -36,11 +36,12 @@ impl ControlRegister {
         }
     }
 
+    // Bit 2 clear: add 1 (move across a row); set: add 32 (move down a column).
     pub fn vram_add_increment(&self) -> u8 {
         if self.contains(ControlRegister::VRAM_ADD_INCREMENT) {
-            1
-        } else {
             32
+        } else {
+            1
         }
     }
 
