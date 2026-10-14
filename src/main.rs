@@ -25,6 +25,7 @@ extern crate lazy_static;
 
 use rand::prelude::*;
 use sdl2::EventPump;
+use sdl2::audio::{AudioQueue, AudioSpecDesired};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
@@ -149,7 +150,47 @@ fn joypad_key_map() -> HashMap<Keycode, JoypadButton> {
 }
 
 const GAME_SCALE: f32 = 3.0;
+// The audio queue paces emulation: after queueing a frame's samples the
+// callback waits until the device has drained to the target depth, so the
+// game runs at the APU's rate rather than the display's refresh rate. The
+// target is 50 ms or three device buffers, whichever is larger, so a single
+// device pull never empties the queue.
+const AUDIO_DEVICE_BUFFER_SAMPLES: u16 = 512;
+const AUDIO_QUEUE_TARGET_SECONDS: f64 = 0.05;
+const AUDIO_QUEUE_MIN_DEVICE_BUFFERS: u32 = 3;
+const AUDIO_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(1);
+// A device that stops draining must not freeze the window.
+const AUDIO_WAIT_LIMIT: std::time::Duration = std::time::Duration::from_millis(100);
 const DEFAULT_GAME_ROM: &str = "roms/Alter_Ego.nes";
+
+fn audio_queue_target_bytes(freq: i32, device_buffer_samples: u16) -> u32 {
+    let target_samples = ((freq as f64 * AUDIO_QUEUE_TARGET_SECONDS) as u32)
+        .max(AUDIO_QUEUE_MIN_DEVICE_BUFFERS * device_buffer_samples as u32);
+    target_samples * size_of::<f32>() as u32
+}
+
+// Opens a mono f32 queue at the APU's sample rate. Without a usable audio
+// device the game still runs, silently, paced by vsync instead.
+fn open_audio_queue(sdl_context: &sdl2::Sdl) -> Option<AudioQueue<f32>> {
+    let audio_spec = AudioSpecDesired {
+        freq: Some(apu::SAMPLE_RATE_HZ as i32),
+        channels: Some(1),
+        samples: Some(AUDIO_DEVICE_BUFFER_SAMPLES),
+    };
+    match sdl_context
+        .audio()
+        .and_then(|audio| audio.open_queue(None, &audio_spec))
+    {
+        Ok(audio_queue) => {
+            audio_queue.resume();
+            Some(audio_queue)
+        }
+        Err(e) => {
+            eprintln!("audio unavailable, running without sound: {e}");
+            None
+        }
+    }
+}
 
 // Runs a ROM through the full CPU/PPU pipeline. The bus invokes the gameloop
 // callback once per frame (on the vblank NMI), which is where the PPU state is
@@ -166,7 +207,15 @@ fn run_game(rom_path: String) {
         .position_centered()
         .build()
         .unwrap();
-    let mut canvas = window.into_canvas().present_vsync().build().unwrap();
+    // With audio the queue depth paces emulation; without it, vsync does.
+    let audio_queue = open_audio_queue(&sdl_context);
+    let canvas_builder = window.into_canvas();
+    let mut canvas = if audio_queue.is_some() {
+        canvas_builder.build()
+    } else {
+        canvas_builder.present_vsync().build()
+    }
+    .unwrap();
     let mut event_pump = sdl_context.event_pump().unwrap();
     canvas.set_scale(GAME_SCALE, GAME_SCALE).unwrap();
 
@@ -186,7 +235,7 @@ fn run_game(rom_path: String) {
     let mut frame = Frame::new();
     let key_map = joypad_key_map();
 
-    let bus = Bus::new(rom, move |ppu: &PPU, joypad: &mut Joypad| {
+    let mut bus = Bus::new(rom, move |ppu: &PPU, joypad: &mut Joypad| {
         render::render(ppu, &mut frame);
         texture.update(None, &frame.data, Frame::WIDTH * 3).unwrap();
         canvas.copy(&texture, None, None).unwrap();
@@ -220,6 +269,21 @@ fn run_game(rom_path: String) {
         }
     });
 
+    if let Some(audio_queue) = audio_queue {
+        let spec = audio_queue.spec();
+        let target_bytes = audio_queue_target_bytes(spec.freq, spec.samples);
+        bus.set_audio_callback(move |samples: &[f32]| {
+            audio_queue.queue_audio(samples).unwrap();
+            let deadline = std::time::Instant::now() + AUDIO_WAIT_LIMIT;
+            while audio_queue.size() > target_bytes && std::time::Instant::now() < deadline {
+                std::thread::sleep(AUDIO_POLL_INTERVAL);
+            }
+            if audio_queue.size() > target_bytes {
+                audio_queue.clear(); // the device stalled; do not let the queue grow
+            }
+        });
+    }
+
     let mut cpu = CPU::new(bus);
     cpu.reset();
     cpu.run();
@@ -238,5 +302,18 @@ fn main() {
         Some("tiles") => tile_viewer::run(),
         Some(rom) => run_game(rom.to_string()),
         None => run_game(DEFAULT_GAME_ROM.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn audio_target_is_50ms_unless_three_device_buffers_are_larger() {
+        // 50 ms at 44.1 kHz is 2205 samples of 4 bytes.
+        assert_eq!(audio_queue_target_bytes(44_100, 512), 2205 * 4);
+        // A 2048-sample device buffer needs three buffers of margin instead.
+        assert_eq!(audio_queue_target_bytes(44_100, 2048), 6144 * 4);
     }
 }

@@ -551,4 +551,35 @@ mod test {
         tick_cycles(&mut bus, 2 * CPU_CYCLES_PER_FRAME);
         assert!(bus.apu.samples().len() < 800);
     }
+    #[test]
+    fn alter_ego_produces_audio_without_panicking() {
+        use crate::cpu::CPU;
+        use std::cell::Cell;
+
+        let Ok(bytes) = std::fs::read("roms/Alter_Ego.nes") else {
+            return;
+        };
+        let rom = Rom::new(&bytes).unwrap();
+        let frames = Cell::new(0u32);
+        let samples = Cell::new(0usize);
+        let mut bus = Bus::new(rom, |_ppu: &PPU, _joypad: &mut Joypad| {});
+        bus.set_audio_callback(|frame: &[f32]| {
+            samples.set(samples.get() + frame.len());
+            frames.set(frames.get() + 1);
+            if frames.get() >= 60 {
+                // cpu.run() only returns on BRK, so unwind out with a marker.
+                std::panic::panic_any(StopEmulation);
+            }
+        });
+        struct StopEmulation;
+        let mut cpu = CPU::new(bus);
+        cpu.reset();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cpu.run()));
+        match result {
+            Err(payload) if payload.is::<StopEmulation>() => {}
+            Err(payload) => std::panic::resume_unwind(payload),
+            Ok(()) => panic!("ROM halted before 60 frames"),
+        }
+        assert!(samples.get() >= 60 * 700, "{} samples", samples.get());
+    }
 }

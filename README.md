@@ -1,11 +1,11 @@
 # NES Emulator
 
-An NES-style emulator written in Rust with an SDL2 window. Runs snake for the demo.
+An NES-style emulator written in Rust with an SDL2 window and audio. Runs snake for the demo.
 
 ## Requirements
 
 - **Rust**
-- **SDL2** — development libraries must be available to the linker.
+- **SDL2** — development libraries must be available to the linker; both the video and audio subsystems are used.
 
 ## Running the Emulator
 
