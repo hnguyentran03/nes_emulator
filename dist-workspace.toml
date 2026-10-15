@@ -1,0 +1,46 @@
+[workspace]
+members = ["cargo:."]
+
+# Config for 'dist'
+[dist]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.33.0"
+# CI backends to support
+ci = "github"
+# The installers to generate for each app
+installers = ["shell", "powershell"]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+# Path that installers should place binaries in
+install-path = "CARGO_HOME"
+# Where to host releases
+hosting = "github"
+# Whether to install an updater program
+install-updater = false
+
+# SDL2 is compiled from source on the runner (the `bundled` feature). On Linux
+# its video and audio backends are only built when these development headers
+# are present at compile time; without them the binary links but reports "no
+# available video device" at runtime. End users need only the runtime libraries,
+# which SDL2 dlopens.
+[dist.dependencies.apt]
+cmake = '*'
+libasound2-dev = '*'
+libpulse-dev = '*'
+libx11-dev = '*'
+libxext-dev = '*'
+libxrandr-dev = '*'
+libxcursor-dev = '*'
+libxi-dev = '*'
+libxinerama-dev = '*'
+libxss-dev = '*'
+libxxf86vm-dev = '*'
+libxkbcommon-dev = '*'
+libwayland-dev = '*'
+libdecor-0-dev = '*'
+libegl1-mesa-dev = '*'
+libgl1-mesa-dev = '*'
+libgbm-dev = '*'
+libdrm-dev = '*'
+libdbus-1-dev = '*'
+libudev-dev = '*'

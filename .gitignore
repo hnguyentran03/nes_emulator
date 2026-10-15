@@ -1,1 +1,10 @@
 /target
+
+# Only the two freeware ROMs are tracked and shipped; keep every other ROM out
+# of the repo and out of release tarballs.
+roms/*
+!roms/Alter_Ego.nes
+!roms/snake.nes
+
+# Local planning files, never committed.
+docs/superpowers/

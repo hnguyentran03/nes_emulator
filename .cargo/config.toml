@@ -1,9 +1,6 @@
-# Help the linker find Homebrew’s libSDL2 on macOS (`brew install sdl2`).
-# If build still fails, run: export LIBRARY_PATH="/opt/homebrew/lib:$LIBRARY_PATH" (Apple Silicon)
-# or: export LIBRARY_PATH="/usr/local/lib:$LIBRARY_PATH" (Intel).
-
-[target.aarch64-apple-darwin]
-rustflags = ["-L", "/opt/homebrew/lib"]
-
-[target.x86_64-apple-darwin]
-rustflags = ["-L", "/usr/local/lib"]
+# SDL2 is compiled from source and linked statically (see the `bundled` and
+# `static-link` features in Cargo.toml), so no system SDL2 is needed, only
+# cmake. The bundled SDL2 declares a CMake minimum version older than CMake 4
+# accepts, so tell CMake to configure anyway.
+[env]
+CMAKE_POLICY_VERSION_MINIMUM = "3.5"

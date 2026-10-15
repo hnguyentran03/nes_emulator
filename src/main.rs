@@ -91,7 +91,7 @@ fn handle_user_input(cpu: &mut CPU, event_pump: &mut EventPump) {
     }
 }
 
-fn run_snake(rom_path: String) {
+fn run_snake(rom_data: &[u8]) {
     // Initialize SDL2 for the graphics
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -109,9 +109,7 @@ fn run_snake(rom_path: String) {
         .create_texture_static(PixelFormatEnum::RGB24, 32, 32)
         .unwrap();
 
-    let rom_data = std::fs::read(&rom_path).unwrap();
-
-    let rom = Rom::new(&rom_data).unwrap();
+    let rom = Rom::new(rom_data).unwrap();
     let bus = Bus::new(rom, |_, _| {});
     let mut cpu = CPU::new(bus);
     cpu.reset();
@@ -161,7 +159,10 @@ const AUDIO_QUEUE_MIN_DEVICE_BUFFERS: u32 = 3;
 const AUDIO_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(1);
 // A device that stops draining must not freeze the window.
 const AUDIO_WAIT_LIMIT: std::time::Duration = std::time::Duration::from_millis(100);
-const DEFAULT_GAME_ROM: &str = "roms/Alter_Ego.nes";
+// Freeware homebrew ROMs embedded as the no-argument defaults, so a
+// downloaded binary runs without a roms/ directory next to it.
+const DEFAULT_GAME_ROM: &[u8] = include_bytes!("../roms/Alter_Ego.nes");
+const DEFAULT_SNAKE_ROM: &[u8] = include_bytes!("../roms/snake.nes");
 
 fn audio_queue_target_bytes(freq: i32, device_buffer_samples: u16) -> u32 {
     let target_samples = ((freq as f64 * AUDIO_QUEUE_TARGET_SECONDS) as u32)
@@ -195,7 +196,7 @@ fn open_audio_queue(sdl_context: &sdl2::Sdl) -> Option<AudioQueue<f32>> {
 // Runs a ROM through the full CPU/PPU pipeline. The bus invokes the gameloop
 // callback once per frame (on the vblank NMI), which is where the PPU state is
 // rendered into a frame buffer and pushed to the SDL window.
-fn run_game(rom_path: String) {
+fn run_game(rom_data: &[u8]) {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem
@@ -228,9 +229,7 @@ fn run_game(rom_path: String) {
         )
         .unwrap();
 
-    let rom_data =
-        std::fs::read(&rom_path).unwrap_or_else(|e| panic!("failed to read {rom_path}: {e}"));
-    let rom = Rom::new(&rom_data).unwrap();
+    let rom = Rom::new(rom_data).unwrap();
 
     let mut frame = Frame::new();
     let key_map = joypad_key_map();
@@ -289,19 +288,21 @@ fn run_game(rom_path: String) {
     cpu.run();
 }
 
+// Reads the ROM at `path`, or returns the embedded default when no path was given.
+fn load_rom(path: Option<&String>, default: &'static [u8]) -> Vec<u8> {
+    match path {
+        Some(path) => std::fs::read(path).unwrap_or_else(|e| panic!("failed to read {path}: {e}")),
+        None => default.to_vec(),
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
-        Some("snake") => {
-            let rom = args
-                .get(2)
-                .cloned()
-                .unwrap_or_else(|| "roms/snake.nes".to_string());
-            run_snake(rom);
-        }
-        Some("tiles") => tile_viewer::run(),
-        Some(rom) => run_game(rom.to_string()),
-        None => run_game(DEFAULT_GAME_ROM.to_string()),
+        Some("snake") => run_snake(&load_rom(args.get(2), DEFAULT_SNAKE_ROM)),
+        Some("tiles") => tile_viewer::run(&load_rom(args.get(2), DEFAULT_GAME_ROM)),
+        Some(_) => run_game(&load_rom(args.get(1), DEFAULT_GAME_ROM)),
+        None => run_game(DEFAULT_GAME_ROM),
     }
 }
 

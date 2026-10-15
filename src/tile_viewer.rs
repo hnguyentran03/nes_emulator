@@ -6,17 +6,12 @@ use sdl2::keyboard::Keycode;
 use sdl2::pixels::PixelFormatEnum;
 
 const SCALE: f32 = 3.0;
-const DEFAULT_ROM: &str = "roms/Alter_Ego.nes";
 
 const BANK_SIZE: usize = 0x1000;
 const TILE_SIZE: usize = 16;
 const TILES_PER_BANK: usize = BANK_SIZE / TILE_SIZE; // 256
 
-pub fn run() {
-    let rom_path = std::env::args()
-        .nth(2)
-        .unwrap_or_else(|| DEFAULT_ROM.to_string());
-
+pub fn run(rom_data: &[u8]) {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem
@@ -41,10 +36,8 @@ pub fn run() {
         )
         .unwrap();
 
-    // Load the ROM and decode its first CHR pattern table into the frame.
-    let rom_data =
-        std::fs::read(&rom_path).unwrap_or_else(|e| panic!("failed to read {rom_path}: {e}"));
-    let rom = Rom::new(&rom_data).unwrap();
+    // Decode the ROM's first CHR pattern table into the frame.
+    let rom = Rom::new(rom_data).unwrap();
 
     let mut frame = Frame::new();
     render_chr_bank(&rom.chr_rom, 0, &mut frame);

@@ -2,10 +2,23 @@
 name = "nes_emulator"
 version = "0.1.0"
 edition = "2024"
+description = "A 6502 / NES emulator with SDL2 video and audio"
+repository = "https://github.com/hnguyentran03/nes_emulator"
+publish = false # not a crates.io crate; dist = true below keeps it releasable
 
 [dependencies]
 bitflags = "2.11.0"
 lazy_static = "1.5.0"
 
-sdl2 ="0.38.0" 
+# `bundled` compiles SDL2 from source (needs cmake); `static-link` links it
+# into the binary so release builds run without a system SDL2.
+sdl2 = { version = "0.38.0", features = ["bundled", "static-link"] }
 rand = "0.10.0"
+
+[package.metadata.dist]
+dist = true
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
