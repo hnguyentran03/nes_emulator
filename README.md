@@ -24,9 +24,10 @@ nes_emulator                       # plays the bundled Alter Ego
 nes_emulator path/to/rom.nes       # plays any mapper-0 ROM
 nes_emulator snake                 # snake demo
 nes_emulator tiles [rom]           # shows a ROM's first CHR pattern table
+nes_emulator --help                # usage and controls
 ```
 
-Alter Ego and the snake ROM are embedded in the binary, so it runs from any directory.
+Alter Ego and the snake ROM are embedded in the binary, so it runs from any directory. Only iNES 1.0 ROMs that use mapper 0 (NROM) and have CHR ROM run; anything else is refused with a message naming the mapper.
 
 ## Building from source
 

@@ -6,5 +6,4 @@ roms/*
 !roms/Alter_Ego.nes
 !roms/snake.nes
 
-# Local planning files, never committed.
-docs/superpowers/
+docs/

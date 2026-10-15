@@ -1,6 +1,6 @@
 [package]
 name = "nes_emulator"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "A 6502 / NES emulator with SDL2 video and audio"
 repository = "https://github.com/hnguyentran03/nes_emulator"

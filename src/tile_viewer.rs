@@ -11,7 +11,7 @@ const BANK_SIZE: usize = 0x1000;
 const TILE_SIZE: usize = 16;
 const TILES_PER_BANK: usize = BANK_SIZE / TILE_SIZE; // 256
 
-pub fn run(rom_data: &[u8]) {
+pub fn run(rom: &Rom) {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem
@@ -37,7 +37,6 @@ pub fn run(rom_data: &[u8]) {
         .unwrap();
 
     // Decode the ROM's first CHR pattern table into the frame.
-    let rom = Rom::new(rom_data).unwrap();
 
     let mut frame = Frame::new();
     render_chr_bank(&rom.chr_rom, 0, &mut frame);

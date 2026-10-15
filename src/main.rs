@@ -91,7 +91,7 @@ fn handle_user_input(cpu: &mut CPU, event_pump: &mut EventPump) {
     }
 }
 
-fn run_snake(rom_data: &[u8]) {
+fn run_snake(rom: Rom) {
     // Initialize SDL2 for the graphics
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -109,7 +109,6 @@ fn run_snake(rom_data: &[u8]) {
         .create_texture_static(PixelFormatEnum::RGB24, 32, 32)
         .unwrap();
 
-    let rom = Rom::new(rom_data).unwrap();
     let bus = Bus::new(rom, |_, _| {});
     let mut cpu = CPU::new(bus);
     cpu.reset();
@@ -196,7 +195,7 @@ fn open_audio_queue(sdl_context: &sdl2::Sdl) -> Option<AudioQueue<f32>> {
 // Runs a ROM through the full CPU/PPU pipeline. The bus invokes the gameloop
 // callback once per frame (on the vblank NMI), which is where the PPU state is
 // rendered into a frame buffer and pushed to the SDL window.
-fn run_game(rom_data: &[u8]) {
+fn run_game(rom: Rom) {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem
@@ -228,8 +227,6 @@ fn run_game(rom_data: &[u8]) {
             Frame::HEIGHT as u32,
         )
         .unwrap();
-
-    let rom = Rom::new(rom_data).unwrap();
 
     let mut frame = Frame::new();
     let key_map = joypad_key_map();
@@ -288,27 +285,110 @@ fn run_game(rom_data: &[u8]) {
     cpu.run();
 }
 
+const USAGE: &str = "\
+Usage: nes_emulator [ROM]          play a .nes ROM (default: the bundled Alter Ego)
+       nes_emulator snake [ROM]    run the snake demo
+       nes_emulator tiles [ROM]    show a ROM's first CHR pattern table
+       nes_emulator --help         show this message
+
+Only iNES 1.0 files that use mapper 0 (NROM) and have CHR ROM are supported.
+Controls: arrows = D-pad, A = A, S = B, Space = Select, Return = Start, Escape = quit.";
+
+// Prints an error and the usage text, then exits. Used for anything the user
+// can fix from the command line, so they see a message instead of a panic.
+fn fail(message: impl std::fmt::Display) -> ! {
+    eprintln!("error: {message}\n\n{USAGE}");
+    std::process::exit(2)
+}
+
 // Reads the ROM at `path`, or returns the embedded default when no path was given.
 fn load_rom(path: Option<&String>, default: &'static [u8]) -> Vec<u8> {
     match path {
-        Some(path) => std::fs::read(path).unwrap_or_else(|e| panic!("failed to read {path}: {e}")),
+        Some(path) => {
+            std::fs::read(path).unwrap_or_else(|e| fail(format!("cannot read {path}: {e}")))
+        }
         None => default.to_vec(),
     }
+}
+
+// Parses the iNES header, exiting with a message if the file is not a ROM.
+fn parse_rom(data: &[u8]) -> Rom {
+    Rom::new(data).unwrap_or_else(|e| fail(e))
+}
+
+// The emulator only has an NROM cartridge and no CHR RAM; say so up front
+// instead of running the ROM into garbage or a panic.
+fn check_playable(rom: &Rom) -> Result<(), String> {
+    if rom.mapper != 0 {
+        return Err(format!(
+            "unsupported mapper {} (only mapper 0 / NROM is implemented)",
+            rom.mapper
+        ));
+    }
+    if rom.chr_rom.is_empty() {
+        return Err("ROM has no CHR ROM (CHR RAM cartridges are not supported)".to_string());
+    }
+    Ok(())
+}
+
+fn playable_rom(path: Option<&String>, default: &'static [u8]) -> Rom {
+    let rom = parse_rom(&load_rom(path, default));
+    if let Err(e) = check_playable(&rom) {
+        fail(e);
+    }
+    rom
 }
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
-        Some("snake") => run_snake(&load_rom(args.get(2), DEFAULT_SNAKE_ROM)),
-        Some("tiles") => tile_viewer::run(&load_rom(args.get(2), DEFAULT_GAME_ROM)),
-        Some(_) => run_game(&load_rom(args.get(1), DEFAULT_GAME_ROM)),
-        None => run_game(DEFAULT_GAME_ROM),
+        Some("-h" | "--help" | "help") => println!("{USAGE}"),
+        Some("snake") => run_snake(playable_rom(args.get(2), DEFAULT_SNAKE_ROM)),
+        Some("tiles") => tile_viewer::run(&parse_rom(&load_rom(args.get(2), DEFAULT_GAME_ROM))),
+        Some(_) => run_game(playable_rom(args.get(1), DEFAULT_GAME_ROM)),
+        None => run_game(playable_rom(None, DEFAULT_GAME_ROM)),
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+
+    fn rom_with_header(mapper: u8, chr_pages: u8) -> Rom {
+        let mut data = vec![
+            0x4E,
+            0x45,
+            0x53,
+            0x1A,
+            1,
+            chr_pages,
+            mapper << 4,
+            mapper & 0xF0,
+        ];
+        data.resize(16, 0);
+        data.resize(16 + 0x4000 + chr_pages as usize * 0x2000, 0);
+        Rom::new(&data).unwrap()
+    }
+
+    #[test]
+    fn embedded_default_roms_are_playable() {
+        for data in [DEFAULT_GAME_ROM, DEFAULT_SNAKE_ROM] {
+            let rom = Rom::new(data).unwrap();
+            assert_eq!(check_playable(&rom), Ok(()));
+        }
+    }
+
+    #[test]
+    fn mapper_other_than_nrom_is_rejected_by_number() {
+        let err = check_playable(&rom_with_header(1, 1)).unwrap_err();
+        assert!(err.contains("mapper 1"), "{err}");
+    }
+
+    #[test]
+    fn chr_ram_cartridge_is_rejected() {
+        let err = check_playable(&rom_with_header(0, 0)).unwrap_err();
+        assert!(err.contains("CHR"), "{err}");
+    }
 
     #[test]
     fn audio_target_is_50ms_unless_three_device_buffers_are_larger() {
